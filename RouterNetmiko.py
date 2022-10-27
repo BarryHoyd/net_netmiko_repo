@@ -3,10 +3,13 @@ import ipaddress
 import yaml
 from getpass import getpass
 from netmiko import ConnectHandler
+import netmiko
 import jinja2
+
 
 class Session:
     """Used to handle netmiko session"""
+
     def __init__(self, session_details: dict) -> None:
         """starts instance of netmiko session to passed device
 
@@ -14,28 +17,29 @@ class Session:
             session_details (dict): Contains everything needed for ssh session
         """
         self.session_details = session_details
+        self.net_connect = None
 
     def make_connection(self) -> None:
         """Used to make ssh connection to cisco ios/nxos/iso telnet"""
         try:
             self.net_connect = ConnectHandler(**self.session_details)
-            output = self.net_connect.send_command('show ver')
-            if "Nexus" in output:
+            connection_output = self.net_connect.send_command('show ver')
+            if "Nexus" in connection_output:
                 self.net_connect.disconnect()
                 self.session_details['device_type'] = 'cisco_nxos'
                 self.net_connect = ConnectHandler(**self.session_details)
-        except:
+        except netmiko.ConnectionException:
             try:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
                 self.net_connect = ConnectHandler(**self.session_details)
-            except:
-                print(f"Connection could not be establised to {self.session_details['host']}")
+            except netmiko.ConnectionException:
+                print(f"Connection could not be established to {self.session_details['host']}")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
-        """Sends show comamnds to deivce and returns input
+        """Sends show commands to device and returns input
 
         Args:
-            ccommand (str): command to run on device
+            command (str): command to run on device
             use_textfsm (bool): decides if textfsm will be used to format output
 
         Returns:
@@ -51,8 +55,10 @@ class Session:
         """
         self.net_connect.send_config_set(config_commands=commands, read_timeout=100)
 
+
 class YamlReader:
     """Used to get data from yaml data"""
+
     def __init__(self, yaml_file_path: str) -> None:
         """Used to read in yaml file
 
@@ -64,7 +70,7 @@ class YamlReader:
                 self.yaml_file = yaml.safe_load(stream)
             except yaml.YAMLError as error:
                 print(error)
-    
+
     @staticmethod
     def calculate_subnet_mask(ip_with_subnet: str) -> str:
         """Used to calculate subnet mask based on x.x.x.x/x address format
@@ -87,24 +93,26 @@ class YamlReader:
         """Used to get loopback details from yaml file
 
         Returns:
-            dict: dictonary of info needed to make loopbacks
+            dict: dictionary of info needed to make loopbacks
         """
-        loopback_commands = self.yaml_file['Loopback']
-        loopback_commands['mask'] = self.calculate_subnet_mask(loopback_commands['ip']) 
-        loopback_commands['ip'] = self.format_ip_address(loopback_commands['ip'])
-        return loopback_commands
+        loopback_data = self.yaml_file['Loopback']
+        loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
+        loopback_data['ip'] = self.format_ip_address(loopback_data['ip'])
+        return loopback_data
+
 
 class CommandGenerator:
     """Used to generate commands using jinja files"""
+
     def __init__(self, jinja_file_path: str) -> None:
-        """Used to set jinja enviroment up
+        """Used to set jinja environment up
 
         Args:
             jinja_file_path (str): file path to jinja folder
         """
-        templateLoader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
-        self.templateEnv = jinja2.Environment(loader=templateLoader)
-    
+        template_loader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
+        self.templateEnv = jinja2.Environment(loader=template_loader)
+
     @staticmethod
     def convert_to_list(to_convert: str) -> list:
         """convert from str to list
@@ -118,10 +126,10 @@ class CommandGenerator:
         return to_convert.split("\n")
 
     def generate_commands(self, command_data: dict) -> list:
-        """Uses jinja templates to generate cisco comamnds
+        """Uses jinja templates to generate cisco commands
 
         Args:
-            command_data (dict): dict containing all data for comamnds
+            command_data (dict): dict containing all data for commands
 
         Returns:
             list: list of commands
@@ -130,7 +138,7 @@ class CommandGenerator:
         commands = template.render(config=command_data)
         list_of_commands = self.convert_to_list(commands)
         return list_of_commands
-        
+
 
 def get_device_details():
     """Used to get device_details
@@ -138,7 +146,7 @@ def get_device_details():
     Returns:
         dict: contains everything needed for ssh session
     """
-    
+
     ip_address = input("Please enter in the ip address of the device: ")
     port = int(input("Please enter in the port: "))
 
@@ -151,8 +159,8 @@ def get_device_details():
     }
     return device
 
+
 if __name__ == '__main__':
-    
     yaml_file = "/home/harry/Documents/input.yaml"
     yaml_reader = YamlReader(yaml_file_path=yaml_file)
     details = yaml_reader.read_loopback()
