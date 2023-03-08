@@ -204,7 +204,7 @@ if __name__ == '__main__':
 
     #Establishes ssh session to a device on the network
     ip_address = get_devices_in_network()
-    ssh_details = get_device_details(ip_address=ip_address)
+    ssh_details = get_device_details(device_ip_address=ip_address)
     session_one = Session(session_details=ssh_details)
     session_one.make_connection()
     print("Connection successfully made...\n")
