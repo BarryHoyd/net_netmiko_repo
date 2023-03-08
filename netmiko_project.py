@@ -27,11 +27,11 @@ class Session:
                 self.net_connect.disconnect()
                 self.session_details['device_type'] = 'cisco_nxos'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
-        except:
+        except netmiko.NetmikoTimeoutException:
             try:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
-            except:
+            except netmiko.NetmikoAuthenticationException:
                 print(f"Connection could not be establised to {self.session_details['host']}")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
@@ -143,7 +143,7 @@ class CommandGenerator:
         return list_of_commands
 
 
-def get_device_details(ip_address: str) -> dict:
+def get_device_details(device_ip_address: str) -> dict:
     """Used to get device_details
 
     Args:
@@ -155,7 +155,7 @@ def get_device_details(ip_address: str) -> dict:
 
     device = {
         'device_type': 'cisco_ios',
-        'host': ip_address,
+        'host': device_ip_address,
         'port': int(input("Please enter in the port: ")),
         'username': input("Please enter the username: "),
         'password': getpass()
@@ -213,12 +213,14 @@ if __name__ == '__main__':
     details = yaml_reader.read_loopback()
     generated_loopback_commands = command_generator.generate_commands(command_data=details)
 
-    before_output = session_one.send_show_command(command='show ip int brief', use_textfsm=False)
+    before_output = session_one.send_show_command(command='show ip int brief',
+                                                    use_textfsm=False)
     print(f"{before_output}\n")
 
     session_one.send_config_commands(commands=generated_loopback_commands)
 
-    after_output = session_one.send_show_command(command='show ip interface brief', use_textfsm=False)
+    after_output = session_one.send_show_command(command='show ip interface brief',
+                                                    use_textfsm=False)
     print(f"{after_output}\n")
 
     response = os.system("ping -c 1 10.1.1.1 >/dev/null 2>&1")
