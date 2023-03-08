@@ -4,7 +4,7 @@ import re
 from getpass import getpass
 import ipaddress
 import yaml
-from netmiko import ConnectHandler
+import netmiko
 import jinja2
 
 class Session:
@@ -16,20 +16,21 @@ class Session:
             session_details (dict): Contains everything needed for ssh session
         """
         self.session_details = session_details
+        self.net_connect = netmiko.BaseConnection
 
     def make_connection(self) -> None:
         """Used to make ssh connection to cisco ios/nxos/iso telnet"""
         try:
-            self.net_connect = ConnectHandler(**self.session_details)
+            self.net_connect = netmiko.ConnectHandler(**self.session_details)
             output = self.net_connect.send_command('show ver')
             if "Nexus" in output:
                 self.net_connect.disconnect()
                 self.session_details['device_type'] = 'cisco_nxos'
-                self.net_connect = ConnectHandler(**self.session_details)
+                self.net_connect = netmiko.ConnectHandler(**self.session_details)
         except:
             try:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
-                self.net_connect = ConnectHandler(**self.session_details)
+                self.net_connect = netmiko.ConnectHandler(**self.session_details)
             except:
                 print(f"Connection could not be establised to {self.session_details['host']}")
 
@@ -43,7 +44,8 @@ class Session:
         Returns:
             str: output of command once run on device
         """
-        return self.net_connect.send_command(command_string=command, read_timeout=100, use_textfsm=use_textfsm)
+        return self.net_connect.send_command(command_string=command, 
+                            read_timeout=100, use_textfsm=use_textfsm)
 
     def send_config_commands(self, commands: list) -> None:
         """Sends config commands to device
@@ -66,7 +68,7 @@ class YamlReader:
                 self.yaml_file = yaml.safe_load(stream)
             except yaml.YAMLError as error:
                 print(error)
-    
+
     @staticmethod
     def calculate_subnet_mask(ip_with_subnet: str) -> str:
         """Used to calculate subnet mask based on x.x.x.x/x address format
@@ -99,7 +101,7 @@ class YamlReader:
             dict: dictonary of info needed to make loopbacks
         """
         loopback_commands = self.yaml_file['Loopback']
-        loopback_commands['mask'] = self.calculate_subnet_mask(loopback_commands['ip']) 
+        loopback_commands['mask'] = self.calculate_subnet_mask(loopback_commands['ip'])
         loopback_commands['ip'] = self.format_ip_address(loopback_commands['ip'])
         return loopback_commands
 
@@ -111,9 +113,9 @@ class CommandGenerator:
         Args:
             jinja_file_path (str): file path to jinja folder
         """
-        templateLoader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
-        self.template_env = jinja2.Environment(loader=templateLoader)
-    
+        template_loader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
+        self.template_env = jinja2.Environment(loader=template_loader)
+
     @staticmethod
     def convert_to_list(to_convert: str) -> list:
         """convert from str to list
@@ -139,7 +141,7 @@ class CommandGenerator:
         commands = template.render(config=command_data)
         list_of_commands = self.convert_to_list(commands)
         return list_of_commands
-        
+  
 
 def get_device_details(ip_address: str) -> dict:
     """Used to get device_details
@@ -150,7 +152,7 @@ def get_device_details(ip_address: str) -> dict:
     Returns:
         dict: contains everything needed for ssh session
     """
-    
+
     ip_address = ip_address
     port = int(input("Please enter in the port: "))
 
@@ -185,18 +187,17 @@ def get_devices_in_network() -> str:
             if user_index >= 0:
                 ip_address = connected_devices[user_index]
                 break
-            else:
-                print("Please select a valid device in the range displayed\n")
+            print("Please select a valid device in the range displayed\n")
         except IndexError:
             print("Please select a valid device in the range displayed\n")
         except ValueError:
             print("Please select one of the devices using numbers\n")
-            
+  
     print()
     return ip_address
 
 if __name__ == '__main__':
-    
+
     #Loads YAML input file
     YAML_FILE = "/home/harry/Documents/input.yaml"
     yaml_reader = YamlReader(yaml_file_path=YAML_FILE)
@@ -213,7 +214,7 @@ if __name__ == '__main__':
 
     #Loads commands
     details = yaml_reader.read_loopback()
-    loopback_commands = command_generator.generate_commands(details)
+    loopback_commands = command_generator.generate_commands(command_details=details)
 
     output = session_one.send_show_command(command='show ip int brief', use_textfsm=False)
     print(f"{output}\n")
