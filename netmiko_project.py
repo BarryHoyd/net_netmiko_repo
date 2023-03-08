@@ -44,7 +44,7 @@ class Session:
         Returns:
             str: output of command once run on device
         """
-        return self.net_connect.send_command(command_string=command, 
+        return self.net_connect.send_command(command_string=command,
                             read_timeout=100, use_textfsm=use_textfsm)
 
     def send_config_commands(self, commands: list) -> None:
@@ -141,7 +141,7 @@ class CommandGenerator:
         commands = template.render(config=command_data)
         list_of_commands = self.convert_to_list(commands)
         return list_of_commands
-  
+
 
 def get_device_details(ip_address: str) -> dict:
     """Used to get device_details
@@ -153,13 +153,10 @@ def get_device_details(ip_address: str) -> dict:
         dict: contains everything needed for ssh session
     """
 
-    ip_address = ip_address
-    port = int(input("Please enter in the port: "))
-
     device = {
         'device_type': 'cisco_ios',
         'host': ip_address,
-        'port': port,
+        'port': int(input("Please enter in the port: ")),
         'username': input("Please enter the username: "),
         'password': getpass()
     }
@@ -171,7 +168,7 @@ def get_devices_in_network() -> str:
     Returns:
         str: device ip address that will be connected to
     """
-    ip_address = ""
+    user_selected_ip_address = ""
 
     #Used to get all connected devices ip addresses
     stream = os.popen('arp -a')
@@ -185,16 +182,16 @@ def get_devices_in_network() -> str:
         try:
             user_index = int(input("Please select the device you would like to conect to: ")) - 1
             if user_index >= 0:
-                ip_address = connected_devices[user_index]
+                user_selected_ip_address = connected_devices[user_index]
                 break
             print("Please select a valid device in the range displayed\n")
         except IndexError:
             print("Please select a valid device in the range displayed\n")
         except ValueError:
             print("Please select one of the devices using numbers\n")
-  
+
     print()
-    return ip_address
+    return user_selected_ip_address
 
 if __name__ == '__main__':
 
@@ -214,15 +211,15 @@ if __name__ == '__main__':
 
     #Loads commands
     details = yaml_reader.read_loopback()
-    loopback_commands = command_generator.generate_commands(command_details=details)
+    generated_loopback_commands = command_generator.generate_commands(command_data=details)
 
-    output = session_one.send_show_command(command='show ip int brief', use_textfsm=False)
-    print(f"{output}\n")
+    before_output = session_one.send_show_command(command='show ip int brief', use_textfsm=False)
+    print(f"{before_output}\n")
 
-    session_one.send_config_commands(commands=loopback_commands)
+    session_one.send_config_commands(commands=generated_loopback_commands)
 
-    output = session_one.send_show_command(command='show ip interface brief', use_textfsm=False)
-    print(f"{output}\n")
+    after_output = session_one.send_show_command(command='show ip interface brief', use_textfsm=False)
+    print(f"{after_output}\n")
 
     response = os.system("ping -c 1 10.1.1.1 >/dev/null 2>&1")
     if response == 0:
