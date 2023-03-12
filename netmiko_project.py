@@ -76,8 +76,6 @@ class UserInput:
                 user_int_input = int(input("Please make a selection: "))
                 if start >= user_int_input <= end:
                     break
-                else:
-                    print("Please make a valid selection\n")
             except ValueError:
                 print("Please select one of the options using numbers\n")
         return user_int_input
@@ -175,7 +173,9 @@ class Session:
             interface_choice (str): physical, loopback, Vlan, port channel
         """
         if interface_choice == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", loopback_session=self, loopback_user_input=self.user_input)
+            loopback = Loopback(jinja_file_path=JINJA_FILE,
+            yaml_file_path="/home/harry/Documents/input.yaml",
+            loopback_session=self, loopback_user_input=self.user_input)
             loopback.show_loopbacks(user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
@@ -185,7 +185,9 @@ class Session:
             interface_to_create (str): physical, loopback, Vlan, port channel
         """
         if interface_to_create == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", loopback_session=self, loopback_user_input=self.user_input)
+            loopback = Loopback(jinja_file_path=JINJA_FILE,
+            yaml_file_path="/home/harry/Documents/input.yaml",
+            loopback_session=self, loopback_user_input=self.user_input)
             loopback.create_loopback()
 
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
@@ -195,7 +197,9 @@ class Session:
             interface_type_to_delete (str): physical, loopback, Vlan, port channel_
         """
         if interface_type_to_delete == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", loopback_session=self, loopback_user_input=self.user_input)
+            loopback = Loopback(jinja_file_path=JINJA_FILE,
+            yaml_file_path="/home/harry/Documents/input.yaml",
+            loopback_session=self, loopback_user_input=self.user_input)
             loopback.delte_loopback()
 
 class CommandGenerator:
