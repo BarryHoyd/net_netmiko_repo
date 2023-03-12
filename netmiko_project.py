@@ -167,7 +167,7 @@ class Session:
         full_config = self.send_show_command('show run', False)
         print(full_config)
         self.write_output(data_to_write=full_config)
-    
+
     def send_show_interface_commands(self, interface_choice: str) -> None:
         """Used to determine what view commands to send (send)
 
@@ -187,7 +187,7 @@ class Session:
         if interface_to_create == "loopback":
             loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", loopback_session=self, loopback_user_input=self.user_input)
             loopback.create_loopback()
-    
+
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
         """_summary_
 
@@ -238,7 +238,7 @@ class CommandGenerator:
             str: ip address minus mask
         """
         return unformatted_ip[:unformatted_ip.find("/")]
-    
+
     @staticmethod
     def convert_to_list(to_convert: str) -> list:
         """convert from str to list
@@ -352,7 +352,7 @@ class Loopback(CommandGenerator):
         print("\nCommands are being executed...")
         self.ping_result(ip_address_to_ping=loopback_data['ip'], interface_created_name=loopback_data['name'])
         self.show_loopbacks(user_interactable=False, is_for_delete=False)
-    
+
     def delte_loopback(self) -> None:
         """Used to delete loopbacks"""
         self.show_loopbacks(user_interactable=True, is_for_delete=True)
@@ -369,7 +369,7 @@ class Loopback(CommandGenerator):
         loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
         loopback_data['ip'] = self.format_ip_address(loopback_data['ip'])
         return loopback_data
-        
+
 class Main:
     """Main program body"""
     def __init__(self) -> None:
@@ -460,7 +460,7 @@ class Main:
 
         self.display_main_menu()
         main_menu_choice = self.user_input.validate_input_int(1, 2)
-        if main_menu_choice == 1: 
+        if main_menu_choice == 1:
             ssh_details = self.device_scan()
             self.ssh_session = Session(session_details=ssh_details, user_input=self.user_input)
             self.ssh_session.make_connection()
