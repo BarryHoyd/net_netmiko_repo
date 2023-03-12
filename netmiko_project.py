@@ -1,9 +1,9 @@
 """Program using netmiko for the automation of cisco devices"""
-from ast import Pass
 import os
 import re
 from getpass import getpass
 import ipaddress
+import sys
 import yaml
 import netmiko
 import jinja2
@@ -12,8 +12,7 @@ class UserInput:
     """Used to gather and validate user input"""
     def __init__(self) -> None:
         """No attributes to assign"""
-        pass
-    
+
     @staticmethod
     def get_device_details(device_ip_address: str) -> dict:
         """Used to get device_details
@@ -75,12 +74,13 @@ class UserInput:
         while True:
             try:
                 user_int_input = int(input("Please make a selection: "))
-                if user_int_input >= start and user_int_input <= end:
-                    return user_int_input
+                if start >= user_int_input <= end:
+                    break
                 else:
                     print("Please make a valid selection\n")
             except ValueError:
                 print("Please select one of the options using numbers\n")
+        return user_int_input
 
     @staticmethod
     def get_devices_in_network() -> str:
@@ -95,21 +95,8 @@ class UserInput:
         connected_devices = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', connected_devices)
         if len(connected_devices) == 0:
             print("ERROR no devices visable in the network!")
-            quit()
-        else:
-            return connected_devices
-
-    @staticmethod
-    def validate_device_input() -> str:
-        """Used to check if viewing, creating or deleting
-
-        Returns:
-            str: view, create or delete
-        """
-        try:
-            choice = int(input("Please select an option: "))
-        except ValueError:
-            pass
+            sys.exit()
+        return connected_devices
 
 class Session:
     """Used to handle netmiko session"""
@@ -150,8 +137,9 @@ class Session:
         print("[2]. Do not write to file")
         write_to_file = self.user_input.validate_input_int(start = 1, end = 2)
         if write_to_file == 1:
-            with open(OUTPUT_FILE, "a") as w:
-                w.writelines(data_to_write)
+            with open(OUTPUT_FILE, "a", encoding="utf-8") as write_file:
+                write_file.writelines(data_to_write)
+        print("\nWritten to output file!")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
         """Sends show comamnds to deivce and returns input
