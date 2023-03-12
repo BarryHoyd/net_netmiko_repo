@@ -39,6 +39,7 @@ class UserInput:
         
         Args:
             list_to_validate (list): list to validate user choice for
+            message_to_be_displayed (str): message to be displayed to console
         
         Returns:
             str: valid user choice
@@ -143,7 +144,7 @@ class Session:
         """Sends show comamnds to deivce and returns input
 
         Args:
-            ccommand (str): command to run on device
+            command (str): command to run on device
             use_textfsm (bool): decides if textfsm will be used to format output
 
         Returns:
@@ -209,6 +210,7 @@ class CommandGenerator:
 
         Args:
             jinja_file_path (str): file path to jinja folder
+            yaml_file_path (str): file path to yaml file
         """
         template_loader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
         self.template_env = jinja2.Environment(loader=template_loader)
@@ -257,7 +259,12 @@ class CommandGenerator:
 
     @staticmethod
     def ping_result(ip_address_to_ping: str, interface_created_name: str) -> None:
-        """Used to ping an ip address"""
+        """Used to ping an ip address
+
+        Args:
+            ip_address_to_ping (str): ip to ping check against
+            interface_created_name (str): for output message
+        """
         response = os.system(f"ping -c 1 {ip_address_to_ping} >/dev/null 2>&1")
         if response == 0:
             print(f"Creation of {interface_created_name} successful")
@@ -269,6 +276,7 @@ class CommandGenerator:
 
         Args:
             command_data (dict): dict containing all data for comamnds
+            template_to_use (str): what template should be used for commands
 
         Returns:
             list: list of commands
@@ -303,7 +311,13 @@ class Loopback(CommandGenerator):
         self.loopback_user_input = loopback_user_input
 
     def show_loopbacks(self, user_interactable: bool, is_for_delete: bool) -> None:
-        """Used to show all loopbaks on the device"""
+        """Used to show all loopbaks on the device
+
+        Args:
+            user_interactable (bool): used to see if user can interact with the console
+            is_for_delete (bool): used to get delete command
+        """
+
         formatted_loopbacks = []
         loopbacks = self.loopback_session.send_show_command(command='show interfaces',
                                                         use_textfsm=True)
@@ -320,8 +334,10 @@ class Loopback(CommandGenerator):
                 print("\nPlease select one that you wold like to delete")
             else:
                 print("\nPlease select one that you wold like to view indepth")
-            loopback_to_view = formatted_loopbacks[self.loopback_user_input.validate_input_int(1, len(formatted_loopbacks)) - 1]['interface']
-            loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}",
+            loopback_to_view = formatted_loopbacks[self.loopback_user_input.validate_input_int(
+                                                                                        1, len(formatted_loopbacks)) - 1]['interface']
+            loopback_details = self.loopback_session.send_show_command(
+                                                                    command=f"show run interface {loopback_to_view}",
                                                                     use_textfsm=False)
             loopback_details = loopback_details[loopback_details.find("interface"):]
             if is_for_delete:
@@ -368,7 +384,7 @@ class Loopback(CommandGenerator):
         self.show_loopbacks(user_interactable=True, is_for_delete=True)
         self.show_loopbacks(user_interactable=False, is_for_delete=False)
 
-    def use_yaml(self) -> None:
+    def use_yaml(self) -> dict:
         """Uses yaml input file to create commands
 
         Returns:
@@ -423,8 +439,9 @@ class Main:
 //                       //
 ///////////////////////////\n""")
         list_of_connected_devices = self.user_input.get_devices_in_network()
-        device_to_connect_to = self.user_input.validate_input_list(list_to_validate=list_of_connected_devices,
-        message_to_be_displayed="Please select the device you want to conenct to: ")
+        device_to_connect_to = self.user_input.validate_input_list(
+                                                            list_to_validate=list_of_connected_devices,
+                                                            message_to_be_displayed="Please select the device you want to conenct to: ")
         return self.user_input.get_device_details(device_to_connect_to)
 
     def display_device_menu(self, device_connected_to_ip: str) -> int:
