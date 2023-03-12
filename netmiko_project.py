@@ -288,7 +288,8 @@ class CommandGenerator:
 
 class Loopback(CommandGenerator):
     """Used to handle everything loopback"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, loopback_session: Session, loopback_user_input: UserInput) -> None:
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, loopback_session: Session,
+    loopback_user_input: UserInput) -> None:
         """Used to assign attributes to child class
 
         Args:
@@ -304,7 +305,8 @@ class Loopback(CommandGenerator):
     def show_loopbacks(self, user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show all loopbaks on the device"""
         formatted_loopbacks = []
-        loopbacks = self.loopback_session.send_show_command(command='show interfaces', use_textfsm=True)
+        loopbacks = self.loopback_session.send_show_command(command='show interfaces',
+                                                        use_textfsm=True)
         for loopback in loopbacks:
             if "Loopback" in loopback['interface']:
                 formatted_loopbacks.append(loopback)
@@ -319,12 +321,14 @@ class Loopback(CommandGenerator):
             else:
                 print("\nPlease select one that you wold like to view indepth")
             loopback_to_view = formatted_loopbacks[self.loopback_user_input.validate_input_int(1, len(formatted_loopbacks)) - 1]['interface']
-            loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}", use_textfsm=False)
+            loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}",
+                                                                    use_textfsm=False)
             loopback_details = loopback_details[loopback_details.find("interface"):]
             if is_for_delete:
                 loopback_to_delete = loopback_details[:loopback_details.find("\n")]
                 self.loopback_session.send_config_commands(commands=f"no {loopback_to_delete}")
-                print("\nThe loopback has been deleted\nWould you like to write the old config to a file?")
+                print("\nThe loopback has been deleted\n")
+                print("Would you like to write the old config to a file?")
             else:
                 print(f"\n{loopback_details}")
             print()
@@ -351,10 +355,12 @@ class Loopback(CommandGenerator):
             loopback_data["ip"] = self.format_ip_address(unformatted_ip=user_loopback_ip)
         else:
             loopback_data = self.use_yaml()
-        loopback_commands  = self.generate_commands(command_data=loopback_data, template_to_use="loopback")
+        loopback_commands  = self.generate_commands(command_data=loopback_data,
+                                                template_to_use="loopback")
         self.loopback_session.send_config_commands(commands=loopback_commands)
         print("\nCommands are being executed...")
-        self.ping_result(ip_address_to_ping=loopback_data['ip'], interface_created_name=loopback_data['name'])
+        self.ping_result(ip_address_to_ping=loopback_data['ip'],
+                    interface_created_name=loopback_data['name'])
         self.show_loopbacks(user_interactable=False, is_for_delete=False)
 
     def delte_loopback(self) -> None:
@@ -417,7 +423,8 @@ class Main:
 //                       //
 ///////////////////////////\n""")
         list_of_connected_devices = self.user_input.get_devices_in_network()
-        device_to_connect_to = self.user_input.validate_input_list(list_to_validate=list_of_connected_devices,message_to_be_displayed="Please select the device you want to conenct to: ")
+        device_to_connect_to = self.user_input.validate_input_list(list_to_validate=list_of_connected_devices,
+        message_to_be_displayed="Please select the device you want to conenct to: ")
         return self.user_input.get_device_details(device_to_connect_to)
 
     def display_device_menu(self, device_connected_to_ip: str) -> int:
@@ -486,31 +493,3 @@ if __name__ == '__main__':
 
     main = Main()
     main.run()
-    """
-    #Establishes ssh session to a device on the network
-    ssh_details = main.device_scan()
-    session_one = Session(session_details=ssh_details)
-    session_one.make_connection()
-    print("Connection successfully made...\n")
-
-    #Loads commands
-    loopback_data = yaml_reader.read_loopback()
-    loopback_data['mask'] = command_generator.calculate_subnet_mask(loopback_data['ip'])
-    loopback_data['ip'] = command_generator.format_ip_address(loopback_data['ip'])
-    generated_loopback_commands = command_generator.generate_commands(command_data=loopback_data, template_to_use="loopback")
-
-    before_output = session_one.send_show_command(command='show ip int brief',
-                                                    use_textfsm=False)
-    print(f"{before_output}\n")
-
-    session_one.send_config_commands(commands=generated_loopback_commands)
-
-    after_output = session_one.send_show_command(command='show ip interface brief',
-                                                    use_textfsm=False)
-    print(f"{after_output}\n")
-
-    response = os.system("ping -c 1 10.1.1.1 >/dev/null 2>&1")
-    if response == 0:
-        print("Creation of Loopback1 successful")
-    else:
-        print("Creation of Loopback1 unccessful")"""
