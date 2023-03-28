@@ -207,7 +207,7 @@ class Session:
             loopback = Loopback(jinja_file_path=JINJA_FILE,
             yaml_file_path="/home/harry/Documents/input.yaml",
             loopback_session=self, loopback_user_input=self.user_input)
-            loopback.delte_loopback()
+            loopback.delete_loopback()
 
 class CommandGenerator:
     """Used to generate commands using jinja files"""
@@ -363,8 +363,7 @@ class Loopback(CommandGenerator):
             is_for_delete (bool): used to get delete command
         """
         formatted_loopbacks = []
-        loopbacks = self.loopback_session.send_show_command(command='show interfaces',
-                                                        use_textfsm=True)
+        loopbacks = self.loopback_session.send_show_command(command='show interfaces',use_textfsm=True)
         for loopback in loopbacks:
             if "Loopback" in loopback['interface']:
                 formatted_loopbacks.append(loopback)
@@ -373,7 +372,6 @@ class Loopback(CommandGenerator):
             print("\nNo loopbacks found!")
         else:
             while True:
-                loopback_to_view = ""
                 print("\nThese are the loopbacks on the device:")
                 for index, formatted_loopback in enumerate(formatted_loopbacks, start=1):
                     print(f"[{index}]. {formatted_loopback['interface']}")
@@ -383,31 +381,18 @@ class Loopback(CommandGenerator):
                         print("\nPlease select one that you wold like to delete")
                     else:
                         print("\nPlease select one that you wold like to view indepth")
-                    try:
-                        loopback_index = self.loopback_user_input.validate_input_int(1, len(formatted_loopbacks))
-                        if loopback_index == -1:
-                            break
-                        else:
-                            loopback_to_view = formatted_loopbacks[loopback_index-1]['interface']
-                            loopback_details = self.loopback_session.send_show_command(
-                                                                                    command=f"show run interface {loopback_to_view}",
-                                                                                    use_textfsm=False)
-                            loopback_details = loopback_details[loopback_details.find("interface"):]
-                    except IndexError:
-                        break
-                    print(f"\n{loopback_details}")
-                    
-                    if is_for_delete:
-                        list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", loopback_details)
-                        ip_address_to_remove = list_of_ip_addresses[0]
-                        loopback_to_delete = loopback_details[:loopback_details.find("\n")]
-                        self.loopback_session.send_config_commands(commands=f"no {loopback_to_delete}")
-                        self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
-                        print("The loopback has been deleted!")
-                        print("Would you like to write the old config to a file?")
-                        self.loopback_session.write_output(loopback_details)
-                        break
 
+                    loopback_index = self.loopback_user_input.validate_input_int(1, len(formatted_loopbacks))
+                    if loopback_index == -1:
+                        break
+                    loopback_to_view = formatted_loopbacks[loopback_index-1]['interface']
+                    loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}",use_textfsm=False)
+                    loopback_details = loopback_details[loopback_details.find("interface"):]
+
+                    print(f"\n{loopback_details}")
+                    if is_for_delete:
+                        self.validate_loopback_delete(loopback_to_delete_details=loopback_details)
+                        break
                     print("Would you like to write the config to a file?")
                     self.loopback_session.write_output(loopback_details)
                 else:
@@ -449,10 +434,25 @@ class Loopback(CommandGenerator):
         self.add_to_db(ip_address_to_add=loopback_data['ip'])
         input("Press enter to continue...")
 
-    def delte_loopback(self) -> None:
+    def delete_loopback(self) -> None:
         """Used to delete loopbacks"""
         self.show_loopbacks(user_interactable=True, is_for_delete=True)
         self.show_loopbacks(user_interactable=False, is_for_delete=False)
+
+    def validate_loopback_delete(self, loopback_to_delete_details: str) -> None:
+        """Used to safely delete loopback
+
+        Args:
+            loopback_to_delete (str): full config to remove
+        """
+        list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", loopback_to_delete_details)
+        ip_address_to_remove = list_of_ip_addresses[0]
+        loopback_to_delete = loopback_to_delete_details[:loopback_to_delete_details.find("\n")]
+        self.loopback_session.send_config_commands(commands=f"no {loopback_to_delete}")
+        self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
+        print("The loopback has been deleted!")
+        print("Would you like to write the old config to a file?")
+        self.loopback_session.write_output(loopback_to_delete_details)
 
     def use_yaml(self) -> dict:
         """Uses yaml input file to create commands
