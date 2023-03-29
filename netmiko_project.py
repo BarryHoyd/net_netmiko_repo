@@ -2,6 +2,7 @@
 import os
 import re
 from getpass import getpass
+from datetime import datetime
 import ipaddress
 import sys
 import yaml
@@ -141,7 +142,12 @@ class Session:
         write_to_file = self.user_input.validate_input_int(start = 1, end = 2)
         if write_to_file == 1:
             with open(OUTPUT_FILE, "a", encoding="utf-8") as write_file:
+                write_file.write("=====================================\n")
+                now = datetime.now()
+                write_file.write(f"{now.strftime('%m/%d/%Y, %H:%M:%S')}\n")
+                write_file.write("-------------------------------------\n\n")
                 write_file.writelines(data_to_write)
+                write_file.write("\n")
             print("\nWritten to output file!")
         elif write_to_file == 2:
             print("\nNot written to output file!")
