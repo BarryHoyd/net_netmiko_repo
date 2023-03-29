@@ -7,7 +7,7 @@ import sys
 import yaml
 import netmiko
 import jinja2
-from tinydb import TinyDB, Query
+from tinydb import TinyDB, where
 
 class UserInput:
     """Used to gather and validate user input"""
@@ -183,7 +183,7 @@ class Session:
             loopback = Loopback(jinja_file_path=JINJA_FILE,
             yaml_file_path="/home/harry/Documents/input.yaml",
             loopback_session=self, loopback_user_input=self.user_input)
-            loopback.show_loopbacks(user_interactable=True, is_for_delete=False)
+            loopback.show_loopbacks(is_user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
         """Used to determine what view commands to send (create)
@@ -198,7 +198,7 @@ class Session:
             loopback.create_loopback()
 
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
-        """_summary_
+        """Used to determine what view commands to send (delete)
 
         Args:
             interface_type_to_delete (str): physical, loopback, Vlan, port channel_
@@ -237,12 +237,19 @@ class CommandGenerator:
             bool: valid or not
         """
         try:
-            ip_to_check = ip_to_check[:ip_to_check.find("/")]
-            return ipaddress.ip_address(ip_to_check)
+            formatted_ip_to_check = ip_to_check[:ip_to_check.find("/")]
+            if ipaddress.ip_address(formatted_ip_to_check):
+                for item in DB_FILE:
+                    net = ipaddress.IPv4Network(item['ip_address'])
+                    if ipaddress.IPv4Address(formatted_ip_to_check) in net:
+                        print(f"\nERROR! {ip_to_check} is already reserved in the network!\n")
+                        return False
+                return True
         except ValueError:
             print("Please input a valid ip address! \n")
         except IndexError:
             print("Please input a valid ip address! \n")
+        return False
 
     @staticmethod
     def calculate_subnet_mask(ip_with_subnet: str) -> str:
@@ -258,16 +265,20 @@ class CommandGenerator:
         return subnet_mask.netmask.compressed
 
     @staticmethod
-    def format_ip_address(unformatted_ip: str) -> str:
+    def get_next_ip_address(network_address: str) -> str:
         """Formats ip by removing subnet mask
 
         Args:
-            unformatted_ip (str): ip address including mask
+            network_address (str): ip address including mask
 
         Returns:
             str: ip address minus mask
         """
-        return unformatted_ip[:unformatted_ip.find("/")]
+        hosts = []
+        network = ipaddress.IPv4Network(network_address)
+        for host in network.hosts():
+            hosts.append(host)
+        return str(hosts[0])
 
     @staticmethod
     def convert_to_list(to_convert: str) -> list:
@@ -303,7 +314,7 @@ class CommandGenerator:
             ip_address_to_add (str): ip address to be added
         """
         DB_FILE.insert({'ip_address': ip_address_to_add})
-        print(f"{ip_address_to_add} has been added to the data base!")
+        print(f"\n{ip_address_to_add} has been added to the data base!")
 
     @staticmethod
     def remove_from_db(ip_address_to_remove: str) -> None:
@@ -312,8 +323,10 @@ class CommandGenerator:
         Args:
             ip_address_to_remove (str): ip address to be removed
         """
-        stored_device = Query()
-        DB_FILE.remove(stored_device.ip_address == ip_address_to_remove)
+        for item in DB_FILE:
+            if ipaddress.IPv4Address(ip_address_to_remove) in ipaddress.IPv4Network(item['ip_address']):
+                DB_FILE.remove(where('ip_address') == item['ip_address'])
+                break
         print(f"{ip_address_to_remove} has been removed from the data base!")
 
     def generate_commands(self, command_data: dict, template_to_use: str) -> list:
@@ -355,11 +368,11 @@ class Loopback(CommandGenerator):
         self.loopback_session = loopback_session
         self.loopback_user_input = loopback_user_input
 
-    def show_loopbacks(self, user_interactable: bool, is_for_delete: bool) -> None:
+    def show_loopbacks(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show all loopbaks on the device
 
         Args:
-            user_interactable (bool): used to see if user can interact with the console
+            is_user_interactable (bool): used to see if user can interact with the console
             is_for_delete (bool): used to get delete command
         """
         formatted_loopbacks = []
@@ -370,13 +383,14 @@ class Loopback(CommandGenerator):
 
         if len(formatted_loopbacks) == 0:
             print("\nNo loopbacks found!")
+            input("Press enter to continue...")
         else:
             while True:
                 print("\nThese are the loopbacks on the device:")
                 for index, formatted_loopback in enumerate(formatted_loopbacks, start=1):
                     print(f"[{index}]. {formatted_loopback['interface']}")
 
-                if user_interactable:
+                if is_user_interactable:
                     if is_for_delete:
                         print("\nPlease select one that you wold like to delete")
                     else:
@@ -396,12 +410,12 @@ class Loopback(CommandGenerator):
                     print("Would you like to write the config to a file?")
                     self.loopback_session.write_output(loopback_details)
                 else:
-                    break
+                    input("Please press enter to continue")
 
     def create_loopback(self) -> None:
         """Used to create loopback"""
         loopback_data = dict
-        self.show_loopbacks(user_interactable=False, is_for_delete=False)
+        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
         print("\nCreating loopback started...\n")
         print("Please select one of the following: ")
         print("[1]. Create using command input")
@@ -418,26 +432,25 @@ class Loopback(CommandGenerator):
                         'desc': input("Please enter in the description: "),
                         'mask': self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
                     }
-                    loopback_data["ip"] = self.format_ip_address(unformatted_ip=user_loopback_ip)
+                    loopback_data["ip"] = self.get_next_ip_address(network_address=user_loopback_ip)
                     break
         elif loopback_user_choice == 2:
             loopback_data = self.use_yaml()
         elif loopback_user_choice == -1:
             return
-        loopback_commands  = self.generate_commands(command_data=loopback_data,
-                                                template_to_use="loopback")
+        
+        loopback_commands  = self.generate_commands(command_data=loopback_data,template_to_use="loopback")
         self.loopback_session.send_config_commands(commands=loopback_commands)
         print("\nCommands are being executed...")
-        self.ping_result(ip_address_to_ping=loopback_data['ip'],
-                    interface_created_name=loopback_data['name'])
-        self.show_loopbacks(user_interactable=False, is_for_delete=False)
-        self.add_to_db(ip_address_to_add=loopback_data['ip'])
+        self.ping_result(ip_address_to_ping=loopback_data['ip'], interface_created_name=loopback_data['name'])
+        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
+        self.add_to_db(ip_address_to_add=user_loopback_ip)
         input("Press enter to continue...")
 
     def delete_loopback(self) -> None:
         """Used to delete loopbacks"""
-        self.show_loopbacks(user_interactable=True, is_for_delete=True)
-        self.show_loopbacks(user_interactable=False, is_for_delete=False)
+        self.show_loopbacks(is_user_interactable=True, is_for_delete=True)
+        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
 
     def validate_loopback_delete(self, loopback_to_delete_details: str) -> None:
         """Used to safely delete loopback
@@ -451,7 +464,7 @@ class Loopback(CommandGenerator):
         self.loopback_session.send_config_commands(commands=f"no {loopback_to_delete}")
         self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
         print("The loopback has been deleted!")
-        print("Would you like to write the old config to a file?")
+        print("\nWould you like to write the old config to a file?")
         self.loopback_session.write_output(loopback_to_delete_details)
 
     def use_yaml(self) -> dict:
@@ -463,7 +476,7 @@ class Loopback(CommandGenerator):
         loopback_data = self.read_loopback()
 
         loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
-        loopback_data['ip'] = self.format_ip_address(loopback_data['ip'])
+        loopback_data['ip'] = self.get_next_ip_address(loopback_data['ip'])
         return loopback_data
 
 class Main:
@@ -578,15 +591,12 @@ class Main:
             sys.exit()
         print()
 
+
 if __name__ == '__main__':
     YAML_FILE = "/home/harry/Documents/input.yaml"
     JINJA_FILE = '/home/harry/Documents/Jinja Templates'
     OUTPUT_FILE = "/home/harry/Documents/output.txt"
-
     DB_FILE = TinyDB('/home/harry/Documents/db.json')
-
-    for item in DB_FILE:
-        print(item)
 
     main = Main()
     main.run()
