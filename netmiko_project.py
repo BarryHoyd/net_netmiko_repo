@@ -323,11 +323,13 @@ class CommandGenerator:
         Args:
             ip_address_to_remove (str): ip address to be removed
         """
+        removed_ip_address = ""
         for item in DB_FILE:
             if ipaddress.IPv4Address(ip_address_to_remove) in ipaddress.IPv4Network(item['ip_address']):
+                removed_ip_address = item['ip_address']
                 DB_FILE.remove(where('ip_address') == item['ip_address'])
                 break
-        print(f"{ip_address_to_remove} has been removed from the data base!")
+        print(f"{removed_ip_address} has been removed from the data base!")
 
     def generate_commands(self, command_data: dict, template_to_use: str) -> list:
         """Uses jinja templates to generate cisco comamnds
@@ -410,11 +412,13 @@ class Loopback(CommandGenerator):
                     print("Would you like to write the config to a file?")
                     self.loopback_session.write_output(loopback_details)
                 else:
-                    input("Please press enter to continue")
+                    input("\nPress enter to continue..")
+                    break
 
     def create_loopback(self) -> None:
         """Used to create loopback"""
         loopback_data = dict
+        user_loopback_ip = ""
         self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
         print("\nCreating loopback started...\n")
         print("Please select one of the following: ")
@@ -432,20 +436,28 @@ class Loopback(CommandGenerator):
                         'desc': input("Please enter in the description: "),
                         'mask': self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
                     }
-                    loopback_data["ip"] = self.get_next_ip_address(network_address=user_loopback_ip)
                     break
         elif loopback_user_choice == 2:
             loopback_data = self.use_yaml()
+            user_loopback_ip = loopback_data['ip']
         elif loopback_user_choice == -1:
             return
+        self.validate_loopback_create(complete_loopback_data=loopback_data, user_validated_ip=user_loopback_ip)
         
-        loopback_commands  = self.generate_commands(command_data=loopback_data,template_to_use="loopback")
+    def validate_loopback_create(self, complete_loopback_data: dict, user_validated_ip: str) -> None:
+        """Used to create and validate newly created loopbacks
+
+        Args:
+            complete_loopback_data (dict): all info needed to create a loopback (validated)
+            user_validated_ip (str): ip address to use (validated)
+        """
+        complete_loopback_data["ip"] = self.get_next_ip_address(network_address=user_validated_ip)
+        loopback_commands  = self.generate_commands(command_data=complete_loopback_data, template_to_use="loopback")
         self.loopback_session.send_config_commands(commands=loopback_commands)
         print("\nCommands are being executed...")
-        self.ping_result(ip_address_to_ping=loopback_data['ip'], interface_created_name=loopback_data['name'])
+        self.ping_result(ip_address_to_ping=complete_loopback_data['ip'], interface_created_name=complete_loopback_data['name'])
         self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
-        self.add_to_db(ip_address_to_add=user_loopback_ip)
-        input("Press enter to continue...")
+        self.add_to_db(ip_address_to_add=complete_loopback_data)
 
     def delete_loopback(self) -> None:
         """Used to delete loopbacks"""
@@ -474,10 +486,9 @@ class Loopback(CommandGenerator):
             dict: everything needed to make a loopback
         """
         loopback_data = self.read_loopback()
-
-        loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
-        loopback_data['ip'] = self.get_next_ip_address(loopback_data['ip'])
-        return loopback_data
+        if self.check_ip_format(loopback_data['ip']):
+            loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
+            return loopback_data
 
 class Main:
     """Main program body"""
