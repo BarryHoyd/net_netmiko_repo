@@ -1,0 +1,4 @@
+Loopback:
+   name: "loopback 6"
+   ip: "10.9.1.0/24"
+   desc: "Harry test"
