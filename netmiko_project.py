@@ -29,7 +29,7 @@ class UserInput:
         device = {
             'device_type': 'cisco_ios',
             'host': device_ip_address,
-            'port': int(input("Please enter in the port: ")),
+            'port': 22,
             'username': input("Please enter the username: "),
             'password': getpass()
         }
@@ -83,7 +83,7 @@ class UserInput:
                 if user_int_input >= start and user_int_input <= end:
                     break
             except ValueError:
-                    return -1
+                return -1
         return user_int_input
 
     @staticmethod
@@ -131,27 +131,6 @@ class Session:
             except netmiko.NetmikoAuthenticationException:
                 print(f"Connection could not be establised to {self.session_details['host']}")
 
-    def write_output(self, data_to_write: str) -> None:
-        """Used to write output config to file
-
-        Args:
-            data_to_write (str): config to be written to file
-        """
-        print("[1]. Write to file")
-        print("[2]. Do not write to file")
-        write_to_file = self.user_input.validate_input_int(start = 1, end = 2)
-        if write_to_file == 1:
-            with open(OUTPUT_FILE, "a", encoding="utf-8") as write_file:
-                write_file.write("=====================================\n")
-                now = datetime.now()
-                write_file.write(f"{now.strftime('%m/%d/%Y, %H:%M:%S')}\n")
-                write_file.write("-------------------------------------\n\n")
-                write_file.writelines(data_to_write)
-                write_file.write("\n")
-            print("\nWritten to output file!")
-        elif write_to_file == 2:
-            print("\nNot written to output file!")
-
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
         """Sends show comamnds to deivce and returns input
 
@@ -173,22 +152,18 @@ class Session:
         """
         self.net_connect.send_config_set(config_commands=commands, read_timeout=100)
 
-    def show_running_config(self) -> None:
-        """Deals with running config aspect"""
-        full_config = self.send_show_command('show run', False)
-        print(full_config)
-        self.write_output(data_to_write=full_config)
-
     def send_show_interface_commands(self, interface_choice: str) -> None:
         """Used to determine what view commands to send (send)
 
         Args:
             interface_choice (str): physical, loopback, Vlan, port channel
         """
-        if interface_choice == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE,
-            yaml_file_path="/home/harry/Documents/input.yaml",
-            loopback_session=self, loopback_user_input=self.user_input)
+        if interface_choice == "full":
+            full = FullConfig(jinja_file_path="", yaml_file_path="", user_input=self.user_input, session=self)
+            full.show_running_config()
+
+        elif interface_choice == "loopback":
+            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
             loopback.show_loopbacks(is_user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
@@ -198,9 +173,7 @@ class Session:
             interface_to_create (str): physical, loopback, Vlan, port channel
         """
         if interface_to_create == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE,
-            yaml_file_path="/home/harry/Documents/input.yaml",
-            loopback_session=self, loopback_user_input=self.user_input)
+            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
             loopback.create_loopback()
 
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
@@ -210,14 +183,12 @@ class Session:
             interface_type_to_delete (str): physical, loopback, Vlan, port channel_
         """
         if interface_type_to_delete == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE,
-            yaml_file_path="/home/harry/Documents/input.yaml",
-            loopback_session=self, loopback_user_input=self.user_input)
+            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
             loopback.delete_loopback()
 
 class CommandGenerator:
     """Used to generate commands using jinja files"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str) -> None:
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
         """Used to set jinja enviroment up
 
         Args:
@@ -226,11 +197,16 @@ class CommandGenerator:
         """
         template_loader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
         self.template_env = jinja2.Environment(loader=template_loader)
-        with open(yaml_file_path, "r", encoding="utf-8") as stream:
-            try:
-                self.yaml_file = yaml.safe_load(stream)
-            except yaml.YAMLError as error:
-                print(error)
+        try:
+            with open(yaml_file_path, "r", encoding="utf-8") as stream:
+                try:
+                    self.yaml_file = yaml.safe_load(stream)
+                except yaml.YAMLError as error:
+                    print(error)
+        except:
+            pass
+        self.user_input = user_input
+        self.session = session
 
     @staticmethod
     def check_ip_format(ip_to_check: str) -> bool:
@@ -245,11 +221,13 @@ class CommandGenerator:
         try:
             formatted_ip_to_check = ip_to_check[:ip_to_check.find("/")]
             if ipaddress.ip_address(formatted_ip_to_check):
+                ipv4_address = ipaddress.IPv4Address(formatted_ip_to_check)
                 for item in DB_FILE:
                     net = ipaddress.IPv4Network(item['ip_address'])
-                    if ipaddress.IPv4Address(formatted_ip_to_check) in net:
-                        print(f"\nERROR! {ip_to_check} is already reserved in the network!\n")
-                        return False
+                    for host in net.hosts():
+                        if ipv4_address == host or ipv4_address == net.broadcast_address:
+                            print(f"\nERROR! {ip_to_check} is already reserved in the network!\n")
+                            return False
                 return True
         except ValueError:
             print("Please input a valid ip address! \n")
@@ -281,10 +259,14 @@ class CommandGenerator:
             str: ip address minus mask
         """
         hosts = []
-        network = ipaddress.IPv4Network(network_address)
-        for host in network.hosts():
-            hosts.append(host)
-        return str(hosts[0])
+        try:
+            network = ipaddress.IPv4Network(network_address)
+            for host in network.hosts():
+                hosts.append(host)
+            return str(hosts[0])
+        except ValueError:
+            print("ERROR not starting ip at network address!")
+            return
 
     @staticmethod
     def convert_to_list(to_convert: str) -> list:
@@ -337,6 +319,27 @@ class CommandGenerator:
                 break
         print(f"{removed_ip_address} has been removed from the data base!")
 
+    def write_output(self, data_to_write: str) -> None:
+        """Used to write output config to file
+
+        Args:
+            data_to_write (str): config to be written to file
+        """
+        print("[1]. Write to file")
+        print("[2]. Do not write to file")
+        write_to_file = self.user_input.validate_input_int(start = 1, end = 2)
+        if write_to_file == 1:
+            with open(OUTPUT_FILE, "a", encoding="utf-8") as write_file:
+                write_file.write("=====================================\n")
+                now = datetime.now()
+                write_file.write(f"{now.strftime('%m/%d/%Y, %H:%M:%S')}\n")
+                write_file.write("-------------------------------------\n\n")
+                write_file.writelines(data_to_write)
+                write_file.write("\n")
+            print("\nWritten to output file!")
+        elif write_to_file == 2:
+            print("\nNot written to output file!")
+
     def generate_commands(self, command_data: dict, template_to_use: str) -> list:
         """Uses jinja templates to generate cisco comamnds
 
@@ -352,18 +355,64 @@ class CommandGenerator:
         list_of_commands = self.convert_to_list(commands)
         return list_of_commands
 
-    def read_loopback(self) -> dict:
-        """Used to get loopback details from yaml file
+    def get_all_interfaces_of_type(self, interface_type: str) -> list:
+        """Get all interfaces of specified type
+
+        Args:
+            interface_type (list): What interfaces are wanted
 
         Returns:
-            dict: dictonary of info needed to make loopbacks
+            list: all interfaces of disered type
         """
-        return self.yaml_file['Loopback']
+        all_interfaces_of_type = []
+        all_interfaces = self.session.send_show_command(command='show interfaces',use_textfsm=True)
+        for interface in all_interfaces:
+            if interface_type in interface['interface']:
+                all_interfaces_of_type.append(interface)
+        return all_interfaces_of_type
+    
+    def check_name(self, name_to_check: str, interface_type: str) -> bool:
+        """_summary_
+
+        Args:
+            name_to_check (str): _description_
+            interface_type (str): _description_
+
+        Returns:
+            bool: _description_
+        """
+        names_of_interfaces = []
+        interfaces = self.get_all_interfaces_of_type(interface_type=interface_type)
+        for interface in interfaces:
+            names_of_interfaces.append(interface['interface'])
+        for name in names_of_interfaces:
+            if name == name_to_check:
+                return False
+        return True
+
+class FullConfig(CommandGenerator):
+    """used to handle everything full config"""
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
+        """Used to assign attributes to child class
+
+        Args:
+            jinja_file_path (str): file path to jinja folder
+            yaml_file_path (str): pathh to yaml input file
+            user_input (UserInput): ref to user input class
+            session (Session): ref to session class
+        """
+        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
+        self.full_session = session
+
+    def show_running_config(self) -> None:
+        """Deals with running config aspect"""
+        full_config = self.full_session.send_show_command('show run', False)
+        print(f"\n{full_config}")
+        self.write_output(data_to_write=full_config)
 
 class Loopback(CommandGenerator):
     """Used to handle everything loopback"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, loopback_session: Session,
-    loopback_user_input: UserInput) -> None:
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
         """Used to assign attributes to child class
 
         Args:
@@ -372,9 +421,8 @@ class Loopback(CommandGenerator):
             loopback_session (Session): ref to session class
             loopback_user_input (UserInput): ref to user input class
         """
-        super().__init__(jinja_file_path, yaml_file_path)
-        self.loopback_session = loopback_session
-        self.loopback_user_input = loopback_user_input
+        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
+        self.loopback_session = session
 
     def show_loopbacks(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show all loopbaks on the device
@@ -383,19 +431,15 @@ class Loopback(CommandGenerator):
             is_user_interactable (bool): used to see if user can interact with the console
             is_for_delete (bool): used to get delete command
         """
-        formatted_loopbacks = []
-        loopbacks = self.loopback_session.send_show_command(command='show interfaces',use_textfsm=True)
-        for loopback in loopbacks:
-            if "Loopback" in loopback['interface']:
-                formatted_loopbacks.append(loopback)
+        loopbacks = self.get_all_interfaces_of_type(interface_type="Loopback")
 
-        if len(formatted_loopbacks) == 0:
+        if len(loopbacks) == 0:
             print("\nNo loopbacks found!")
             input("Press enter to continue...")
         else:
             while True:
                 print("\nThese are the loopbacks on the device:")
-                for index, formatted_loopback in enumerate(formatted_loopbacks, start=1):
+                for index, formatted_loopback in enumerate(loopbacks, start=1):
                     print(f"[{index}]. {formatted_loopback['interface']}")
 
                 if is_user_interactable:
@@ -404,10 +448,10 @@ class Loopback(CommandGenerator):
                     else:
                         print("\nPlease select one that you wold like to view indepth")
 
-                    loopback_index = self.loopback_user_input.validate_input_int(1, len(formatted_loopbacks))
+                    loopback_index = self.user_input.validate_input_int(1, len(loopbacks))
                     if loopback_index == -1:
                         break
-                    loopback_to_view = formatted_loopbacks[loopback_index-1]['interface']
+                    loopback_to_view = loopbacks[loopback_index-1]['interface']
                     loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}",use_textfsm=False)
                     loopback_details = loopback_details[loopback_details.find("interface"):]
 
@@ -416,40 +460,75 @@ class Loopback(CommandGenerator):
                         self.validate_loopback_delete(loopback_to_delete_details=loopback_details)
                         break
                     print("Would you like to write the config to a file?")
-                    self.loopback_session.write_output(loopback_details)
+                    self.write_output(loopback_details)
                 else:
                     input("\nPress enter to continue..")
                     break
 
     def create_loopback(self) -> None:
         """Used to create loopback"""
-        loopback_data = dict
-        user_loopback_ip = ""
+        loopback_tuple = ()
+
         self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
         print("\nCreating loopback started...\n")
         print("Please select one of the following: ")
         print("[1]. Create using command input")
         print("[2]. Create using input file\n")
-        loopback_user_choice = self.loopback_user_input.validate_input_int(start=1, end=2)
+        loopback_user_choice = self.user_input.validate_input_int(start=1, end=2)
 
         if loopback_user_choice == 1:
-            while True:
-                user_loopback_ip = input("Please enter in the ip address with subnet: ")
-                if self.check_ip_format(ip_to_check=user_loopback_ip):
-                    loopback_data = {
-                        'name': input("Please enter in the name: "),
-                        'ip': '',
-                        'desc': input("Please enter in the description: "),
-                        'mask': self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
-                    }
-                    break
+            loopback_tuple = self.console_creation()
         elif loopback_user_choice == 2:
-            loopback_data = self.use_yaml()
-            user_loopback_ip = loopback_data['ip']
+            loopback_tuple = self.use_yaml()
         elif loopback_user_choice == -1:
             return
-        self.validate_loopback_create(complete_loopback_data=loopback_data, user_validated_ip=user_loopback_ip)
+        self.validate_loopback_create(complete_loopback_data=loopback_tuple[0], user_validated_ip=loopback_tuple[1])
         
+    def console_creation(self) -> tuple:
+        """Used to created loopback from user input
+
+        Returns:
+            tuple: [0]dict, [1]str
+        """
+        while True:
+            user_loopback_ip = input("Please enter in the ip address with subnet: ")
+            if self.check_ip_format(ip_to_check=user_loopback_ip):
+                loopback_data = {
+                    'name': input("Please enter in the name: "),
+                    'ip': '',
+                    'desc': input("Please enter in the description: "),
+                    'mask': ''
+                }
+                loopback_data['ip'] = self.get_next_ip_address(network_address=user_loopback_ip)
+                if loopback_data['ip'] != None:
+                    loopback_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
+                    if self.check_name(name_to_check=loopback_data['name'], interface_type="Loopback"):
+                        break
+                    else:
+                        print("\nError name already in use. Delete before creating!\n")
+        return (loopback_data, user_loopback_ip)
+
+    def use_yaml(self) -> tuple:
+        """Uses yaml input file to create commands
+
+        Returns:
+            tuple: [0]dict, [1]str
+        """
+        loopback_data = self.yaml_file['Loopback']
+        self.check_ip_format(loopback_data['ip'])
+        user_loopback_ip = loopback_data['ip']
+        loopback_data['ip']= self.get_next_ip_address(network_address=user_loopback_ip)
+        if loopback_data['ip'] != None:
+            loopback_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
+            if self.check_name(name_to_check=loopback_data['name'], interface_type="Loopback"):
+                pass
+            else:
+                print("\nError name already in use. Delete before creating!\n")
+        else:
+            print("Please adjust input file!")
+            return
+        return (loopback_data, user_loopback_ip)
+
     def validate_loopback_create(self, complete_loopback_data: dict, user_validated_ip: str) -> None:
         """Used to create and validate newly created loopbacks
 
@@ -457,13 +536,12 @@ class Loopback(CommandGenerator):
             complete_loopback_data (dict): all info needed to create a loopback (validated)
             user_validated_ip (str): ip address to use (validated)
         """
-        complete_loopback_data["ip"] = self.get_next_ip_address(network_address=user_validated_ip)
         loopback_commands  = self.generate_commands(command_data=complete_loopback_data, template_to_use="loopback")
         self.loopback_session.send_config_commands(commands=loopback_commands)
         print("\nCommands are being executed...")
         self.ping_result(ip_address_to_ping=complete_loopback_data['ip'], interface_created_name=complete_loopback_data['name'])
         self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
-        self.add_to_db(ip_address_to_add=complete_loopback_data)
+        self.add_to_db(ip_address_to_add=user_validated_ip)
 
     def delete_loopback(self) -> None:
         """Used to delete loopbacks"""
@@ -483,18 +561,7 @@ class Loopback(CommandGenerator):
         self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
         print("The loopback has been deleted!")
         print("\nWould you like to write the old config to a file?")
-        self.loopback_session.write_output(loopback_to_delete_details)
-
-    def use_yaml(self) -> dict:
-        """Uses yaml input file to create commands
-
-        Returns:
-            dict: everything needed to make a loopback
-        """
-        loopback_data = self.read_loopback()
-        if self.check_ip_format(loopback_data['ip']):
-            loopback_data['mask'] = self.calculate_subnet_mask(loopback_data['ip'])
-            return loopback_data
+        self.write_output(loopback_to_delete_details)
 
 class Main:
     """Main program body"""
@@ -572,18 +639,21 @@ class Main:
         Args:
             interface_type (str): physical, loopback, Vlan, port channel
         """
-        print(f"What would you like to do with the {interface_type}(s)?")
-        print("\n[1]. View")
-        print("[2]. Create")
-        print("[3]. Delete\n")
-        device_option_choice = self.user_input.validate_input_int(1, 3)
-        if device_option_choice == 1:
+        if interface_type != "full":
+            print(f"What would you like to do with the {interface_type}(s)?")
+            print("\n[1]. View")
+            print("[2]. Create")
+            print("[3]. Delete\n")
+            device_option_choice = self.user_input.validate_input_int(1, 3)
+            if device_option_choice == 1:
+                self.ssh_session.send_show_interface_commands(interface_choice=interface_type)
+            elif device_option_choice == 2:
+                self.ssh_session.send_create_interface_commands(interface_to_create=interface_type)
+            elif device_option_choice == 3:
+                self.ssh_session.send_delete_interface_commands(interface_type_to_delete=interface_type)
+        else:
             self.ssh_session.send_show_interface_commands(interface_choice=interface_type)
-        elif device_option_choice == 2:
-            self.ssh_session.send_create_interface_commands(interface_to_create=interface_type)
-        elif device_option_choice == 3:
-            self.ssh_session.send_delete_interface_commands(interface_type_to_delete=interface_type)
-
+        
     def run(self) -> None:
         """Runs main body"""
         self.display_intro()
@@ -597,16 +667,13 @@ class Main:
             while True:
                 device_choice = self.display_device_menu(device_connected_to_ip=ssh_details['host'])
                 if device_choice == 1:
-                    self.ssh_session.show_running_config()
+                    self.display_device_options("full")
                 elif device_choice == 2:
                     self.display_device_options("loopback")
                 else:
                     break
         elif main_menu_choice == 2:
             print("Main menu choice: Template Options")
-        else:
-            sys.exit()
-        print()
 
 
 if __name__ == '__main__':
