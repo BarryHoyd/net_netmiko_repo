@@ -158,13 +158,12 @@ class Session:
         Args:
             interface_choice (str): physical, loopback, Vlan, port channel
         """
-        if interface_choice == "full":
+        if interface_choice == "Full":
             full = FullConfig(jinja_file_path="", yaml_file_path="", user_input=self.user_input, session=self)
             full.show_running_config()
-
-        elif interface_choice == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
-            loopback.show_interface_details(interface_type="Loopback", is_user_interactable=True, is_for_delete=False)
+        else:
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_choice, user_input=self.user_input, session=self)
+            interface.show(is_user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
         """Used to determine what view commands to send (create)
@@ -172,9 +171,12 @@ class Session:
         Args:
             interface_to_create (str): physical, loopback, Vlan, port channel
         """
-        if interface_to_create == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
-            loopback.create_loopback()
+        if interface_to_create == "Physical":
+            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
+            physical_interface.create()
+        else:
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
+            interface.create()
 
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
         """Used to determine what view commands to send (delete)
@@ -182,18 +184,22 @@ class Session:
         Args:
             interface_type_to_delete (str): physical, loopback, Vlan, port channel_
         """
-        if interface_type_to_delete == "loopback":
-            loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
-            loopback.delete_loopback()
+        interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
+        interface.show(is_user_interactable=True, is_for_delete=True)
+        interface.show(is_user_interactable=False, is_for_delete=False)
 
-class CommandGenerator:
+class Interface:
     """Used to generate commands using jinja files"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
-        """Used to set jinja enviroment up
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
+        """Used to set up interfaces
 
         Args:
+            Args:
             jinja_file_path (str): file path to jinja folder
-            yaml_file_path (str): file path to yaml file
+            yaml_file_path (str): pathh to yaml input file
+            interface_type (str): type of interface
+            user_input (UserInput): ref to user input class
+            session (Session): ref to session class
         """
         template_loader = jinja2.FileSystemLoader(searchpath=jinja_file_path)
         self.template_env = jinja2.Environment(loader=template_loader)
@@ -205,6 +211,7 @@ class CommandGenerator:
                     print(error)
         except:
             pass
+        self.interface_type = interface_type
         self.user_input = user_input
         self.session = session
 
@@ -269,19 +276,7 @@ class CommandGenerator:
             return
 
     @staticmethod
-    def convert_to_list(to_convert: str) -> list:
-        """convert from str to list
-
-        Args:
-            to_convert (str): str of commands including \n characters
-
-        Returns:
-            list: list of commands
-        """
-        return to_convert.split("\n")
-
-    @staticmethod
-    def ping_result(ip_address_to_ping: str, interface_created_name: str) -> None:
+    def ping(ip_address_to_ping: str, interface_created_name: str) -> None:
         """Used to ping an ip address
 
         Args:
@@ -295,29 +290,24 @@ class CommandGenerator:
             print(f"Creation of {interface_created_name} unccessful")
 
     @staticmethod
-    def add_to_db(ip_address_to_add: str) -> None:
-        """Used to add ip address to TinyDB
+    def edit_db(ip_address: str, add_to_db: bool) -> None:
+        """Used to update TinyDB
 
         Args:
-            ip_address_to_add (str): ip address to be added
+            ip_address (str): ip address to be added or removed
+            add_or_remove (bool): add or remove
         """
-        DB_FILE.insert({'ip_address': ip_address_to_add})
-        print(f"\n{ip_address_to_add} has been added to the data base!")
-
-    @staticmethod
-    def remove_from_db(ip_address_to_remove: str) -> None:
-        """Used to remove ip address from TinyDB
-
-        Args:
-            ip_address_to_remove (str): ip address to be removed
-        """
-        removed_ip_address = ""
-        for item in DB_FILE:
-            if ipaddress.IPv4Address(ip_address_to_remove) in ipaddress.IPv4Network(item['ip_address']):
-                removed_ip_address = item['ip_address']
-                DB_FILE.remove(where('ip_address') == item['ip_address'])
-                break
-        print(f"{removed_ip_address} has been removed from the data base!")
+        if add_to_db:
+            DB_FILE.insert({'ip_address': ip_address})
+            print(f"\n{ip_address} has been added to the data base!")
+        else:
+            removed_ip_address = ""
+            for item in DB_FILE:
+                if ipaddress.IPv4Address(ip_address) in ipaddress.IPv4Network(item['ip_address']):
+                    removed_ip_address = item['ip_address']
+                    DB_FILE.remove(where('ip_address') == item['ip_address'])
+                    break
+            print(f"{removed_ip_address} has been removed from the data base!")
 
     def write_output(self, data_to_write: str) -> None:
         """Used to write output config to file
@@ -340,53 +330,73 @@ class CommandGenerator:
         elif write_to_file == 2:
             print("\nNot written to output file!")
 
-    def generate_commands(self, command_data: dict, template_to_use: str) -> list:
+    def generate_commands(self, command_data: dict) -> list:
         """Uses jinja templates to generate cisco comamnds
 
         Args:
             command_data (dict): dict containing all data for comamnds
-            template_to_use (str): what template should be used for commands
 
         Returns:
             list: list of commands
         """
-        template = self.template_env.get_template(f"{template_to_use}.j2")
+        template = self.template_env.get_template(f"Base.j2")
         commands = template.render(config=command_data)
-        list_of_commands = self.convert_to_list(commands)
+        list_of_commands = commands.split("\n")
         return list_of_commands
 
-    def get_all_interfaces_of_type(self, interface_type: str) -> list:
-        """Get all interfaces of specified type
+    def check_name(self, name_to_check: str) -> bool:
+        """checks if name is already in use
 
         Args:
-            interface_type (list): What interfaces are wanted
+            name_to_check (str): given name
+
+        Returns:
+            bool: is valid
+        """
+        names_of_interfaces = []
+        interfaces = self.get_all_interfaces_of_type()
+        for interface in interfaces:
+            names_of_interfaces.append(interface['interface'])
+        for name in names_of_interfaces:
+            if name == name_to_check:
+                return False
+        return True
+
+    def get_all_interfaces_of_type(self) -> list:
+        """Get all interfaces of specified type
 
         Returns:
             list: all interfaces of disered type
         """
         all_interfaces_of_type = []
         all_interfaces = self.session.send_show_command(command='show interfaces',use_textfsm=True)
-        for interface in all_interfaces:
-            if interface_type in interface['interface']:
-                all_interfaces_of_type.append(interface)
+        if self.interface_type == "Physical":
+            list_of_physical_interfaces = ["Ethernet", "Serial", "BRI"]
+            for physical_interface in list_of_physical_interfaces:
+                for interface in all_interfaces:
+                    if physical_interface in interface['interface']:
+                        all_interfaces_of_type.append(interface)
+        else:
+            for interface in all_interfaces:
+                if self.interface_type in interface['interface']:
+                    all_interfaces_of_type.append(interface)
         return all_interfaces_of_type
     
-    def show_interface_details(self, interface_type: str, is_user_interactable: bool, is_for_delete: bool) -> None:
+    def show(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show interface info
 
         Args:
-            interface_type (str): the type of interface to view
             is_user_interactable (bool): used to see if user can interact with the console
             is_for_delete (bool): used to get delete command
         """
-        list_of_interfaces = self.get_all_interfaces_of_type(interface_type=interface_type)
+        list_of_interfaces = self.get_all_interfaces_of_type()
 
         if len(list_of_interfaces) == 0:
-            print(f"\nNo {interface_type} found!")
+            print(f"\nNo {self.interface_type} found!")
             input("Press enter to continue...")
         else:
             while True:
-                print(f"\nThese are the {interface_type} on the device:")
+                print(f"\nThese are the {self.interface_type} on the device:")
                 for index, formatted_interface in enumerate(list_of_interfaces, start=1):
                     print(f"[{index}]. {formatted_interface['interface']}")
 
@@ -396,70 +406,124 @@ class CommandGenerator:
                     else:
                         print("\nPlease select one that you wold like to view indepth")
 
-                    loopback_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
-                    if loopback_index == -1:
+                    interface_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
+                    if interface_index == -1:
                         break
-                    interface_to_view = list_of_interfaces[loopback_index-1]['interface']
+                    interface_to_view = list_of_interfaces[interface_index-1]['interface']
                     interface_details = self.session.send_show_command(command=f"show run interface {interface_to_view}",use_textfsm=False)
                     interface_details = interface_details[interface_details.find("interface"):]
 
                     print(f"\n{interface_details}")
                     if is_for_delete:
-                        self.delete_interface(interface_type=interface_type, interface_details=interface_details)
+                        self.delete(interface_details=interface_details)
                         break
-                    print("Would you like to write the config to a file?")
+                    print("Would you like to write the config to a file?\n")
                     self.write_output(interface_details)
                 else:
                     input("\nPress enter to continue...")
                     break
 
-    def check_name(self, name_to_check: str, interface_type: str) -> bool:
-        """_summary_
+    def create(self) -> None:
+        """Used to create basic interfaces"""
+        interface_tuple = ()
 
-        Args:
-            name_to_check (str): _description_
-            interface_type (str): _description_
+        self.show(is_user_interactable=False, is_for_delete=False)
+        print(f"\nCreating {self.interface_type} started...\n")
+        print("Please select one of the following: ")
+        print("[1]. Create using command input")
+        print("[2]. Create using input file\n")
+        interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
+
+        if interface_user_choice == 1:
+            interface_tuple = self.console_creation()
+        elif interface_user_choice == 2:
+            interface_tuple = self.yaml_creation()
+        elif interface_user_choice == -1:
+            return
+
+        interface_commands  = self.generate_commands(command_data=interface_tuple[0])
+        self.session.send_config_commands(commands=interface_commands)
+        print("\nCommands are being executed...")
+        self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
+        self.show(is_user_interactable=False, is_for_delete=False)
+        self.edit_db(ip_address=interface_tuple[1], add_to_db=True)                
+
+    def console_creation(self) -> tuple:
+        """Used to created interface from user input
 
         Returns:
-            bool: _description_
+            tuple: [0]dict, [1]str
         """
-        names_of_interfaces = []
-        interfaces = self.get_all_interfaces_of_type(interface_type=interface_type)
-        for interface in interfaces:
-            names_of_interfaces.append(interface['interface'])
-        for name in names_of_interfaces:
-            if name == name_to_check:
-                return False
-        return True
+        while True:
+            user_ip = input("Please enter in the ip address with subnet: ")
+            if self.check_ip_format(ip_to_check=user_ip):
+                interface_data = {
+                    'name': input("Please enter in the name: "),
+                    'ip': '',
+                    'desc': input("Please enter in the description: "),
+                    'mask': '',
+                    'type': 'basic'
+                }
 
-    def delete_interface(self, interface_type: str, interface_details: str) -> None:
+                interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
+                if interface_data['ip'] != None:
+                    interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
+                    if self.check_name(name_to_check=interface_data['name']):
+                        break
+                    else:
+                        print("\nError name already in use. Delete before creating!\n")
+        return (interface_data, user_ip)
+
+    def yaml_creation(self) -> tuple:
+        """Uses yaml input file to create commands
+
+        Returns:
+            tuple: [0]dict, [1]str
+        """
+        interface_data = self.yaml_file[self.interface_type]
+        interface_data['type'] = "basic"
+        self.check_ip_format(interface_data['ip'])
+        user_interface_ip = interface_data['ip']
+        interface_data['ip']= self.get_next_ip_address(network_address=user_interface_ip)
+        if interface_data['ip'] != None:
+            interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_interface_ip)
+            if self.check_name(name_to_check=interface_data['name']):
+                pass
+            else:
+                print("\nError name already in use. Delete before creating!\n")
+        else:
+            print("Please adjust input file!")
+            return
+        return (interface_data, user_interface_ip)
+
+    def delete(self, interface_details: str) -> None:
         """Used to delete interface
 
         Args:
-            interface_type (str): the type of interface to delete
             interface_details (str): full config to remove
         """
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", interface_details)
         ip_address_to_remove = list_of_ip_addresses[0]
         loopback_to_delete = interface_details[:interface_details.find("\n")]
         self.session.send_config_commands(commands=f"no {loopback_to_delete}")
-        self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
-        print(f"The {interface_type} has been deleted!")
+        self.edit_db(ip_address=ip_address_to_remove, add_to_db=False)
+        print(f"The {self.interface_type} has been deleted!")
         print("\nWould you like to write the old config to a file?")
         self.write_output(interface_details)
 
-class FullConfig(CommandGenerator):
+class FullConfig(Interface):
     """used to handle everything full config"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
         """Used to assign attributes to child class
 
         Args:
             jinja_file_path (str): file path to jinja folder
             yaml_file_path (str): pathh to yaml input file
+            interface_type (str): type of interface
             user_input (UserInput): ref to user input class
             session (Session): ref to session class
         """
-        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
+        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
         self.full_session = session
 
     def show_running_config(self) -> None:
@@ -468,125 +532,80 @@ class FullConfig(CommandGenerator):
         print(f"\n{full_config}")
         self.write_output(data_to_write=full_config)
 
-class Loopback(CommandGenerator):
-    """Used to handle everything loopback"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
+class Physical(Interface):
+    """"Used to handle physical interfaces"""
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
         """Used to assign attributes to child class
 
         Args:
             jinja_file_path (str): file path to jinja folder
             yaml_file_path (str): pathh to yaml input file
-            session (Session): ref to session class
+            interface_type (str): type of interface
             user_input (UserInput): ref to user input class
+            session (Session): ref to session class
         """
-        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
-        self.loopback_session = session
+        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
+    
+    def check_in_use(self, interface_name: str) -> bool:
+        """Used to check if a physical interface is already assigned
 
-    def create_loopback(self) -> None:
-        """Used to create loopback"""
-        loopback_tuple = ()
+        Returns:
+            bool: True(not in use) or False(in use)
+        """
+        details = self.session.send_show_command(command=f"show run interface {interface_name}",use_textfsm=False)
+        list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", details)
+        if len(list_of_ip_addresses) == 0:
+            return True
+        else:
+            input(f"\nERROR! {interface_name} already in use please delete then reassign...")
+            return False
 
-        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
-        print("\nCreating loopback started...\n")
-        print("Please select one of the following: ")
-        print("[1]. Create using command input")
-        print("[2]. Create using input file\n")
-        loopback_user_choice = self.user_input.validate_input_int(start=1, end=2)
-
-        if loopback_user_choice == 1:
-            loopback_tuple = self.console_creation()
-        elif loopback_user_choice == 2:
-            loopback_tuple = self.use_yaml()
-        elif loopback_user_choice == -1:
-            return
-        self.validate_loopback_create(complete_loopback_data=loopback_tuple[0], user_validated_ip=loopback_tuple[1])
-        
-    def console_creation(self) -> tuple:
-        """Used to created loopback from user input
+    def console_creation(self, interface_name: str) -> tuple:
+        """Overload of basic method used to created interface from user input
 
         Returns:
             tuple: [0]dict, [1]str
         """
         while True:
-            user_loopback_ip = input("Please enter in the ip address with subnet: ")
-            if self.check_ip_format(ip_to_check=user_loopback_ip):
-                loopback_data = {
-                    'name': input("Please enter in the name: "),
+            user_ip = input("Please enter in the ip address with subnet: ")
+            if self.check_ip_format(ip_to_check=user_ip):
+                interface_data = {
+                    'name': interface_name,
                     'ip': '',
                     'desc': input("Please enter in the description: "),
-                    'mask': ''
+                    'mask': '',
+                    'type': 'basic'
                 }
-                loopback_data['ip'] = self.get_next_ip_address(network_address=user_loopback_ip)
-                if loopback_data['ip'] != None:
-                    loopback_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
-                    if self.check_name(name_to_check=loopback_data['name'], interface_type="Loopback"):
-                        break
-                    else:
-                        print("\nError name already in use. Delete before creating!\n")
-        return (loopback_data, user_loopback_ip)
 
-    def use_yaml(self) -> tuple:
-        """Uses yaml input file to create commands
+                interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
+                if interface_data['ip'] != None:
+                    interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
+                    break
+        return (interface_data, user_ip)
 
-        Returns:
-            tuple: [0]dict, [1]str
-        """
-        loopback_data = self.yaml_file['Loopback']
-        self.check_ip_format(loopback_data['ip'])
-        user_loopback_ip = loopback_data['ip']
-        loopback_data['ip']= self.get_next_ip_address(network_address=user_loopback_ip)
-        if loopback_data['ip'] != None:
-            loopback_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_loopback_ip)
-            if self.check_name(name_to_check=loopback_data['name'], interface_type="Loopback"):
-                pass
-            else:
-                print("\nError name already in use. Delete before creating!\n")
+    def create(self) -> None:
+        """Overload of basic function used to assign physical interfaces"""
+        list_of_interfaces = self.get_all_interfaces_of_type()
+
+        if len(list_of_interfaces) == 0:
+            print(f"\nNo physical interfaces found!")
+            input("Press enter to continue...")
         else:
-            print("Please adjust input file!")
-            return
-        return (loopback_data, user_loopback_ip)
+            print(f"\nThese are the physical interfaces on the device:")
+            for index, formatted_interface in enumerate(list_of_interfaces, start=1):
+                print(f"[{index}]. {formatted_interface['interface']}")
 
-    def validate_loopback_create(self, complete_loopback_data: dict, user_validated_ip: str) -> None:
-        """Used to create and validate newly created loopbacks
+            interface_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
+            interface_to_assign = list_of_interfaces[interface_index-1]['interface']
 
-        Args:
-            complete_loopback_data (dict): all info needed to create a loopback (validated)
-            user_validated_ip (str): ip address to use (validated)
-        """
-        loopback_commands  = self.generate_commands(command_data=complete_loopback_data, template_to_use="loopback")
-        self.loopback_session.send_config_commands(commands=loopback_commands)
-        print("\nCommands are being executed...")
-        self.ping_result(ip_address_to_ping=complete_loopback_data['ip'], interface_created_name=complete_loopback_data['name'])
-        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
-        self.add_to_db(ip_address_to_add=user_validated_ip)
-
-    def delete_loopback(self) -> None:
-        """Used to delete loopbacks"""
-        self.show_interface_details(interface_type="Loopback", is_user_interactable=True, is_for_delete=True)
-        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
-
-class PhysicalInterface(CommandGenerator):
-    """Used to handle everything physical"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
-        """_summary_
-
-        Args:
-            jinja_file_path (str): file path to jinja folder
-            yaml_file_path (str): pathh to yaml input file
-            session (Session): ref to session class
-            user_input (UserInput): ref to user input class
-        """
-        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
-        self.physical_session = session
-    
-    def show_physicals(self) -> None:
-        """_summary_
-
-        Returns:
-            _type_: _description_
-        """
-        pass
-
+            if self.check_in_use(interface_name=interface_to_assign):
+                interface_tuple = self.console_creation(interface_name=interface_to_assign)
+                interface_commands  = self.generate_commands(command_data=interface_tuple[0])
+                self.session.send_config_commands(commands=interface_commands)
+                print("\nCommands are being executed...")
+                self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
+                self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
+            
 class Main:
     """Main program body"""
     def __init__(self) -> None:
@@ -654,8 +673,9 @@ class Main:
 ///////////////////////////\n""")
         print(f"Connected to: {device_connected_to_ip}\n")
         print("[1]. Show running config")
-        print("[2]. View/Create/Delete loopback config\n")
-        return self.user_input.validate_input_int(start=1, end=2)
+        print("[2]. View/Create/Delete loopback config")
+        print("[3]. View/Create/Delete physical interface config\n")
+        return self.user_input.validate_input_int(start=1, end=3)
 
     def display_device_options(self, interface_type):
         """Displays options that can be slected
@@ -663,7 +683,7 @@ class Main:
         Args:
             interface_type (str): physical, loopback, Vlan, port channel
         """
-        if interface_type != "full":
+        if interface_type != "Full":
             print(f"What would you like to do with the {interface_type}(s)?")
             print("\n[1]. View")
             print("[2]. Create")
@@ -691,9 +711,11 @@ class Main:
             while True:
                 device_choice = self.display_device_menu(device_connected_to_ip=ssh_details['host'])
                 if device_choice == 1:
-                    self.display_device_options("full")
+                    self.display_device_options("Full")
                 elif device_choice == 2:
-                    self.display_device_options("loopback")
+                    self.display_device_options("Loopback")
+                elif device_choice == 3:
+                    self.display_device_options("Physical")
                 else:
                     break
         elif main_menu_choice == 2:
