@@ -164,7 +164,7 @@ class Session:
 
         elif interface_choice == "loopback":
             loopback = Loopback(jinja_file_path=JINJA_FILE, yaml_file_path="/home/harry/Documents/input.yaml", user_input=self.user_input, session=self)
-            loopback.show_loopbacks(is_user_interactable=True, is_for_delete=False)
+            loopback.show_interface_details(interface_type="Loopback", is_user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
         """Used to determine what view commands to send (create)
@@ -371,6 +371,48 @@ class CommandGenerator:
                 all_interfaces_of_type.append(interface)
         return all_interfaces_of_type
     
+    def show_interface_details(self, interface_type: str, is_user_interactable: bool, is_for_delete: bool) -> None:
+        """Used to show interface info
+
+        Args:
+            interface_type (str): the type of interface to view
+            is_user_interactable (bool): used to see if user can interact with the console
+            is_for_delete (bool): used to get delete command
+        """
+        list_of_interfaces = self.get_all_interfaces_of_type(interface_type=interface_type)
+
+        if len(list_of_interfaces) == 0:
+            print(f"\nNo {interface_type} found!")
+            input("Press enter to continue...")
+        else:
+            while True:
+                print(f"\nThese are the {interface_type} on the device:")
+                for index, formatted_interface in enumerate(list_of_interfaces, start=1):
+                    print(f"[{index}]. {formatted_interface['interface']}")
+
+                if is_user_interactable:
+                    if is_for_delete:
+                        print("\nPlease select one that you wold like to delete")
+                    else:
+                        print("\nPlease select one that you wold like to view indepth")
+
+                    loopback_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
+                    if loopback_index == -1:
+                        break
+                    interface_to_view = list_of_interfaces[loopback_index-1]['interface']
+                    interface_details = self.session.send_show_command(command=f"show run interface {interface_to_view}",use_textfsm=False)
+                    interface_details = interface_details[interface_details.find("interface"):]
+
+                    print(f"\n{interface_details}")
+                    if is_for_delete:
+                        self.delete_interface(interface_type=interface_type, interface_details=interface_details)
+                        break
+                    print("Would you like to write the config to a file?")
+                    self.write_output(interface_details)
+                else:
+                    input("\nPress enter to continue...")
+                    break
+
     def check_name(self, name_to_check: str, interface_type: str) -> bool:
         """_summary_
 
@@ -389,6 +431,22 @@ class CommandGenerator:
             if name == name_to_check:
                 return False
         return True
+
+    def delete_interface(self, interface_type: str, interface_details: str) -> None:
+        """Used to delete interface
+
+        Args:
+            interface_type (str): the type of interface to delete
+            interface_details (str): full config to remove
+        """
+        list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", interface_details)
+        ip_address_to_remove = list_of_ip_addresses[0]
+        loopback_to_delete = interface_details[:interface_details.find("\n")]
+        self.session.send_config_commands(commands=f"no {loopback_to_delete}")
+        self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
+        print(f"The {interface_type} has been deleted!")
+        print("\nWould you like to write the old config to a file?")
+        self.write_output(interface_details)
 
 class FullConfig(CommandGenerator):
     """used to handle everything full config"""
@@ -418,58 +476,17 @@ class Loopback(CommandGenerator):
         Args:
             jinja_file_path (str): file path to jinja folder
             yaml_file_path (str): pathh to yaml input file
-            loopback_session (Session): ref to session class
-            loopback_user_input (UserInput): ref to user input class
+            session (Session): ref to session class
+            user_input (UserInput): ref to user input class
         """
         super().__init__(jinja_file_path, yaml_file_path, user_input, session)
         self.loopback_session = session
-
-    def show_loopbacks(self, is_user_interactable: bool, is_for_delete: bool) -> None:
-        """Used to show all loopbaks on the device
-
-        Args:
-            is_user_interactable (bool): used to see if user can interact with the console
-            is_for_delete (bool): used to get delete command
-        """
-        loopbacks = self.get_all_interfaces_of_type(interface_type="Loopback")
-
-        if len(loopbacks) == 0:
-            print("\nNo loopbacks found!")
-            input("Press enter to continue...")
-        else:
-            while True:
-                print("\nThese are the loopbacks on the device:")
-                for index, formatted_loopback in enumerate(loopbacks, start=1):
-                    print(f"[{index}]. {formatted_loopback['interface']}")
-
-                if is_user_interactable:
-                    if is_for_delete:
-                        print("\nPlease select one that you wold like to delete")
-                    else:
-                        print("\nPlease select one that you wold like to view indepth")
-
-                    loopback_index = self.user_input.validate_input_int(1, len(loopbacks))
-                    if loopback_index == -1:
-                        break
-                    loopback_to_view = loopbacks[loopback_index-1]['interface']
-                    loopback_details = self.loopback_session.send_show_command(command=f"show run interface {loopback_to_view}",use_textfsm=False)
-                    loopback_details = loopback_details[loopback_details.find("interface"):]
-
-                    print(f"\n{loopback_details}")
-                    if is_for_delete:
-                        self.validate_loopback_delete(loopback_to_delete_details=loopback_details)
-                        break
-                    print("Would you like to write the config to a file?")
-                    self.write_output(loopback_details)
-                else:
-                    input("\nPress enter to continue..")
-                    break
 
     def create_loopback(self) -> None:
         """Used to create loopback"""
         loopback_tuple = ()
 
-        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
+        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
         print("\nCreating loopback started...\n")
         print("Please select one of the following: ")
         print("[1]. Create using command input")
@@ -540,28 +557,35 @@ class Loopback(CommandGenerator):
         self.loopback_session.send_config_commands(commands=loopback_commands)
         print("\nCommands are being executed...")
         self.ping_result(ip_address_to_ping=complete_loopback_data['ip'], interface_created_name=complete_loopback_data['name'])
-        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
+        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
         self.add_to_db(ip_address_to_add=user_validated_ip)
 
     def delete_loopback(self) -> None:
         """Used to delete loopbacks"""
-        self.show_loopbacks(is_user_interactable=True, is_for_delete=True)
-        self.show_loopbacks(is_user_interactable=False, is_for_delete=False)
+        self.show_interface_details(interface_type="Loopback", is_user_interactable=True, is_for_delete=True)
+        self.show_interface_details(interface_type="Loopback", is_user_interactable=False, is_for_delete=False)
 
-    def validate_loopback_delete(self, loopback_to_delete_details: str) -> None:
-        """Used to safely delete loopback
+class PhysicalInterface(CommandGenerator):
+    """Used to handle everything physical"""
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, user_input: UserInput, session: Session) -> None:
+        """_summary_
 
         Args:
-            loopback_to_delete (str): full config to remove
+            jinja_file_path (str): file path to jinja folder
+            yaml_file_path (str): pathh to yaml input file
+            session (Session): ref to session class
+            user_input (UserInput): ref to user input class
         """
-        list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", loopback_to_delete_details)
-        ip_address_to_remove = list_of_ip_addresses[0]
-        loopback_to_delete = loopback_to_delete_details[:loopback_to_delete_details.find("\n")]
-        self.loopback_session.send_config_commands(commands=f"no {loopback_to_delete}")
-        self.remove_from_db(ip_address_to_remove=ip_address_to_remove)
-        print("The loopback has been deleted!")
-        print("\nWould you like to write the old config to a file?")
-        self.write_output(loopback_to_delete_details)
+        super().__init__(jinja_file_path, yaml_file_path, user_input, session)
+        self.physical_session = session
+    
+    def show_physicals(self) -> None:
+        """_summary_
+
+        Returns:
+            _type_: _description_
+        """
+        pass
 
 class Main:
     """Main program body"""
