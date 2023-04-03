@@ -159,7 +159,7 @@ class Session:
             interface_choice (str): physical, loopback, Vlan, port channel
         """
         if interface_choice == "Full":
-            full = FullConfig(jinja_file_path="", yaml_file_path="", user_input=self.user_input, session=self)
+            full = FullConfig(jinja_file_path="", yaml_file_path="", interface_type=interface_choice, user_input=self.user_input, session=self)
             full.show_running_config()
         else:
             interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_choice, user_input=self.user_input, session=self)
@@ -534,18 +534,6 @@ class FullConfig(Interface):
 
 class Physical(Interface):
     """"Used to handle physical interfaces"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
-        """Used to assign attributes to child class
-
-        Args:
-            jinja_file_path (str): file path to jinja folder
-            yaml_file_path (str): pathh to yaml input file
-            interface_type (str): type of interface
-            user_input (UserInput): ref to user input class
-            session (Session): ref to session class
-        """
-        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
-    
     def check_in_use(self, interface_name: str) -> bool:
         """Used to check if a physical interface is already assigned
 
@@ -556,9 +544,8 @@ class Physical(Interface):
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", details)
         if len(list_of_ip_addresses) == 0:
             return True
-        else:
-            input(f"\nERROR! {interface_name} already in use please delete then reassign...")
-            return False
+        input(f"\nERROR! {interface_name} already in use please delete then reassign...")
+        return False
 
     def console_creation(self, interface_name: str) -> tuple:
         """Overload of basic method used to created interface from user input
@@ -578,20 +565,20 @@ class Physical(Interface):
                 }
 
                 interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
-                if interface_data['ip'] != None:
+                if interface_data['ip'] is not None:
                     interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                     break
         return (interface_data, user_ip)
 
-    def create(self) -> None:
+    def assign(self) -> None:
         """Overload of basic function used to assign physical interfaces"""
         list_of_interfaces = self.get_all_interfaces_of_type()
 
         if len(list_of_interfaces) == 0:
-            print(f"\nNo physical interfaces found!")
+            print("\nNo physical interfaces found!")
             input("Press enter to continue...")
         else:
-            print(f"\nThese are the physical interfaces on the device:")
+            print("\nThese are the physical interfaces on the device:")
             for index, formatted_interface in enumerate(list_of_interfaces, start=1):
                 print(f"[{index}]. {formatted_interface['interface']}")
 
