@@ -209,7 +209,7 @@ class Interface:
                     self.yaml_file = yaml.safe_load(stream)
                 except yaml.YAMLError as error:
                     print(error)
-        except:
+        except ValueError:
             pass
         self.interface_type = interface_type
         self.user_input = user_input
@@ -232,7 +232,7 @@ class Interface:
                 for item in DB_FILE:
                     net = ipaddress.IPv4Network(item['ip_address'])
                     for host in net.hosts():
-                        if ipv4_address == host or ipv4_address == net.broadcast_address:
+                        if ipv4_address in (host, net.broadcast_address):
                             print(f"\nERROR! {ip_to_check} is already reserved in the network!\n")
                             return False
                 return True
@@ -273,7 +273,7 @@ class Interface:
             return str(hosts[0])
         except ValueError:
             print("ERROR not starting ip at network address!")
-            return
+            return None
 
     @staticmethod
     def ping(ip_address_to_ping: str, interface_created_name: str) -> None:
@@ -339,7 +339,7 @@ class Interface:
         Returns:
             list: list of commands
         """
-        template = self.template_env.get_template(f"Base.j2")
+        template = self.template_env.get_template("Base.j2")
         commands = template.render(config=command_data)
         list_of_commands = commands.split("\n")
         return list_of_commands
@@ -381,7 +381,7 @@ class Interface:
                 if self.interface_type in interface['interface']:
                     all_interfaces_of_type.append(interface)
         return all_interfaces_of_type
-    
+
     def show(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show interface info
 
@@ -435,7 +435,7 @@ class Interface:
         interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
 
         if interface_user_choice == 1:
-            interface_tuple = self.console_creation()
+            interface_tuple = self.assign_using_console()
         elif interface_user_choice == 2:
             interface_tuple = self.yaml_creation()
         elif interface_user_choice == -1:
@@ -448,7 +448,7 @@ class Interface:
         self.show(is_user_interactable=False, is_for_delete=False)
         self.edit_db(ip_address=interface_tuple[1], add_to_db=True)                
 
-    def console_creation(self) -> tuple:
+    def assign_using_console(self) -> tuple:
         """Used to created interface from user input
 
         Returns:
@@ -466,12 +466,11 @@ class Interface:
                 }
 
                 interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
-                if interface_data['ip'] != None:
+                if interface_data['ip'] is not None:
                     interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                     if self.check_name(name_to_check=interface_data['name']):
                         break
-                    else:
-                        print("\nError name already in use. Delete before creating!\n")
+                    print("\nError name already in use. Delete before creating!\n")
         return (interface_data, user_ip)
 
     def yaml_creation(self) -> tuple:
@@ -485,7 +484,7 @@ class Interface:
         self.check_ip_format(interface_data['ip'])
         user_interface_ip = interface_data['ip']
         interface_data['ip']= self.get_next_ip_address(network_address=user_interface_ip)
-        if interface_data['ip'] != None:
+        if interface_data['ip'] is not None:
             interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_interface_ip)
             if self.check_name(name_to_check=interface_data['name']):
                 pass
@@ -493,7 +492,7 @@ class Interface:
                 print("\nError name already in use. Delete before creating!\n")
         else:
             print("Please adjust input file!")
-            return
+            return None
         return (interface_data, user_interface_ip)
 
     def delete(self, interface_details: str) -> None:
@@ -547,7 +546,7 @@ class Physical(Interface):
         input(f"\nERROR! {interface_name} already in use please delete then reassign...")
         return False
 
-    def console_creation(self, interface_name: str) -> tuple:
+    def assign_using_console(self, interface_name: str) -> tuple:
         """Overload of basic method used to created interface from user input
 
         Returns:
@@ -586,13 +585,13 @@ class Physical(Interface):
             interface_to_assign = list_of_interfaces[interface_index-1]['interface']
 
             if self.check_in_use(interface_name=interface_to_assign):
-                interface_tuple = self.console_creation(interface_name=interface_to_assign)
+                interface_tuple = self.assign_using_console(interface_name=interface_to_assign)
                 interface_commands  = self.generate_commands(command_data=interface_tuple[0])
                 self.session.send_config_commands(commands=interface_commands)
                 print("\nCommands are being executed...")
                 self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
                 self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
-            
+
 class Main:
     """Main program body"""
     def __init__(self) -> None:
@@ -684,7 +683,7 @@ class Main:
                 self.ssh_session.send_delete_interface_commands(interface_type_to_delete=interface_type)
         else:
             self.ssh_session.send_show_interface_commands(interface_choice=interface_type)
-        
+ 
     def run(self) -> None:
         """Runs main body"""
         self.display_intro()
