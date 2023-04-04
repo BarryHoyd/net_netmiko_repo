@@ -130,6 +130,8 @@ class Session:
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
             except netmiko.NetmikoAuthenticationException:
                 print(f"Connection could not be establised to {self.session_details['host']}")
+        except netmiko.NetmikoAuthenticationException:
+                print(f"Connection could not be establised to {self.session_details['host']}. Login incorrect")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
         """Sends show comamnds to deivce and returns input
@@ -143,6 +145,28 @@ class Session:
         """
         return self.net_connect.send_command(command_string=command,
                             read_timeout=100, use_textfsm=use_textfsm)
+
+    def get_full_config(self, use_textfsm: bool) -> str:
+        """Gets full running config
+
+        Args:
+            use_textfsm (bool): decides if textfsm will be used to format output
+
+        Returns:
+            str: full running config of device
+        """
+        return self.send_show_command('show run', use_textfsm=use_textfsm)
+
+    def get_hostname(self) -> str:
+        """Gets the host name of the device
+
+        Returns:
+            str: name of device
+        """
+        device_details = self.get_full_config(use_textfsm=True)
+        name = device_details[device_details.find("hostname") + 9:]
+        name = name[:name.find("\n"):]
+        return name
 
     def send_config_commands(self, commands: list) -> None:
         """Sends config commands to device
@@ -173,7 +197,7 @@ class Session:
         """
         if interface_to_create == "Physical":
             physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
-            physical_interface.create()
+            physical_interface.assign()
         else:
             interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
             interface.create()
@@ -189,7 +213,7 @@ class Session:
         interface.show(is_user_interactable=False, is_for_delete=False)
 
 class Interface:
-    """Used to generate commands using jinja files"""
+    """Used to handle interfaces"""
     def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
         """Used to set up interfaces
 
@@ -435,7 +459,7 @@ class Interface:
         interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
 
         if interface_user_choice == 1:
-            interface_tuple = self.assign_using_console()
+            interface_tuple = self.create_using_console()
         elif interface_user_choice == 2:
             interface_tuple = self.yaml_creation()
         elif interface_user_choice == -1:
@@ -446,16 +470,16 @@ class Interface:
         print("\nCommands are being executed...")
         self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
         self.show(is_user_interactable=False, is_for_delete=False)
-        self.edit_db(ip_address=interface_tuple[1], add_to_db=True)                
+        self.edit_db(ip_address=interface_tuple[1], add_to_db=True)           
 
-    def assign_using_console(self) -> tuple:
+    def create_using_console(self) -> tuple:
         """Used to created interface from user input
 
         Returns:
             tuple: [0]dict, [1]str
         """
         while True:
-            user_ip = input("Please enter in the ip address with subnet: ")
+            user_ip = input("\nPlease enter in the ip address with subnet: ")
             if self.check_ip_format(ip_to_check=user_ip):
                 interface_data = {
                     'name': input("Please enter in the name: "),
@@ -511,23 +535,10 @@ class Interface:
         self.write_output(interface_details)
 
 class FullConfig(Interface):
-    """used to handle everything full config"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
-        """Used to assign attributes to child class
-
-        Args:
-            jinja_file_path (str): file path to jinja folder
-            yaml_file_path (str): pathh to yaml input file
-            interface_type (str): type of interface
-            user_input (UserInput): ref to user input class
-            session (Session): ref to session class
-        """
-        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
-        self.full_session = session
-
+    """Used to handle everything full config"""
     def show_running_config(self) -> None:
         """Deals with running config aspect"""
-        full_config = self.full_session.send_show_command('show run', False)
+        full_config = self.session.get_full_config(use_textsfm=False)
         print(f"\n{full_config}")
         self.write_output(data_to_write=full_config)
 
@@ -592,6 +603,11 @@ class Physical(Interface):
                 self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
                 self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
 
+class Vlan(Interface):
+    """"Used to handle vlan interface"""
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
+        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
+
 class Main:
     """Main program body"""
     def __init__(self) -> None:
@@ -651,13 +667,14 @@ class Main:
         Returns:
             int: user selection of option
         """
+        name = self.ssh_session.get_hostname()
         os.system("clear")
         print("""///////////////////////////
 //                       //
 //         Device        //
 //                       //
 ///////////////////////////\n""")
-        print(f"Connected to: {device_connected_to_ip}\n")
+        print(f"Connected to: {name}\n")
         print("[1]. Show running config")
         print("[2]. View/Create/Delete loopback config")
         print("[3]. View/Create/Delete physical interface config\n")
@@ -683,7 +700,7 @@ class Main:
                 self.ssh_session.send_delete_interface_commands(interface_type_to_delete=interface_type)
         else:
             self.ssh_session.send_show_interface_commands(interface_choice=interface_type)
- 
+
     def run(self) -> None:
         """Runs main body"""
         self.display_intro()
