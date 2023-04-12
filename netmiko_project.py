@@ -93,14 +93,15 @@ class UserInput:
         Returns:
             str: device ip address that will be connected to
         """
-        #Used to get all connected devices ip addresses
+        #Used to get all connected devices ip addreS
         stream = os.popen('arp -a')
         connected_devices = stream.read()
         connected_devices = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', connected_devices)
+        connected_devices.append("10.0.0.1") #R1
         if len(connected_devices) == 0:
             print("ERROR no devices visable in the network!")
             sys.exit()
-        return connected_devices
+        return ["192.168.100.1", "192.168.200.1"]
 
 class Session:
     """Used to handle netmiko session"""
@@ -131,7 +132,7 @@ class Session:
             except netmiko.NetmikoAuthenticationException:
                 print(f"Connection could not be establised to {self.session_details['host']}")
         except netmiko.NetmikoAuthenticationException:
-                print(f"Connection could not be establised to {self.session_details['host']}. Login incorrect")
+            print(f"Connection could not be establised to {self.session_details['host']}. Login incorrect")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
         """Sends show comamnds to deivce and returns input
@@ -234,6 +235,8 @@ class Interface:
                 except yaml.YAMLError as error:
                     print(error)
         except ValueError:
+            pass
+        except FileNotFoundError:
             pass
         self.interface_type = interface_type
         self.user_input = user_input
@@ -538,7 +541,7 @@ class FullConfig(Interface):
     """Used to handle everything full config"""
     def show_running_config(self) -> None:
         """Deals with running config aspect"""
-        full_config = self.session.get_full_config(use_textsfm=False)
+        full_config = self.session.get_full_config(use_textfsm=False)
         print(f"\n{full_config}")
         self.write_output(data_to_write=full_config)
 
@@ -608,6 +611,14 @@ class Vlan(Interface):
     def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
         super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
 
+    def create_vlan(self) -> None:
+        """_summary_
+
+        Returns:
+            _type_: _description_
+        """
+        pass
+    
 class Main:
     """Main program body"""
     def __init__(self) -> None:
