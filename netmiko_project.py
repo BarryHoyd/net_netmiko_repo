@@ -419,6 +419,10 @@ class Interface:
                 for interface in all_interfaces:
                     if physical_interface in interface['interface'] and "." not in interface['interface']:
                         all_interfaces_of_type.append(interface)
+        elif self.interface_type == "Vlan":
+            for interface in all_interfaces:
+                if "." in interface['interface']:
+                    all_interfaces_of_type.append(interface)
         else:
             for interface in all_interfaces:
                 if self.interface_type in interface['interface']:
@@ -450,8 +454,7 @@ class Interface:
                         break
                     interface_to_view = list_of_interfaces[interface_index-1]['interface']
                     return interface_to_view
-                else:
-                    return ""
+                return ""
 
     def show(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show interface info
@@ -651,17 +654,14 @@ class Physical(Interface):
             self.delete(interface_details=interface_to_delete)
 
 class Vlan(Interface):
-    """"Used to handle vlan interface"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
-        super().__init__(jinja_file_path, yaml_file_path, interface_type, user_input, session)
-
+    """"Used to handle vlan interfaces"""
     def create_vlan(self) -> None:
         """_summary_
 
         Returns:
             _type_: _description_
         """
-        pass
+        print()
     
 class Main:
     """Main program body"""
@@ -713,11 +713,8 @@ class Main:
                                                             "Please select the device you want to conenct to: ")
         return self.user_input.get_device_details(device_to_connect_to)
 
-    def display_device_menu(self, device_connected_to_ip: str) -> int:
+    def display_device_menu(self) -> int:
         """Used to display options to user that can be done on a device
-
-        Args:
-            device_connected_to_ip (str): connected device ip
 
         Returns:
             int: user selection of option
@@ -732,10 +729,11 @@ class Main:
         print(f"Connected to: {name}\n")
         print("[1]. Show running config")
         print("[2]. View/Create/Delete loopback config")
-        print("[3]. View/Create/Delete physical interface config\n")
-        return self.user_input.validate_input_int(start=1, end=3)
+        print("[3]. View/Create/Delete physical interface config")
+        print("[4]. View/Create/Delete vlan interface config\n")
+        return self.user_input.validate_input_int(start=1, end=4)
 
-    def display_device_options(self, interface_type):
+    def display_device_options(self, interface_type: str) -> None:
         """Displays options that can be slected
 
         Args:
@@ -767,13 +765,15 @@ class Main:
             self.ssh_session = Session(session_details=ssh_details, user_input=self.user_input)
             self.ssh_session.make_connection()
             while True:
-                device_choice = self.display_device_menu(device_connected_to_ip=ssh_details['host'])
+                device_choice = self.display_device_menu()
                 if device_choice == 1:
                     self.display_device_options("Full")
                 elif device_choice == 2:
                     self.display_device_options("Loopback")
                 elif device_choice == 3:
                     self.display_device_options("Physical")
+                elif device_choice == 4:
+                    self.display_device_options("Vlan")
                 else:
                     break
         elif main_menu_choice == 2:
