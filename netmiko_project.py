@@ -209,9 +209,13 @@ class Session:
         Args:
             interface_type_to_delete (str): physical, loopback, Vlan, port channel_
         """
-        interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
-        interface.show(is_user_interactable=True, is_for_delete=True)
-        interface.show(is_user_interactable=False, is_for_delete=False)
+        if interface_type_to_delete != "Physical":
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
+            interface.show(is_user_interactable=True, is_for_delete=True)
+        else:
+            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
+            physical_interface.delete_physical()
+        #interface.show(is_user_interactable=False, is_for_delete=False)
 
 class Interface:
     """Used to handle interfaces"""
@@ -401,7 +405,7 @@ class Interface:
             list_of_physical_interfaces = ["Ethernet", "Serial", "BRI"]
             for physical_interface in list_of_physical_interfaces:
                 for interface in all_interfaces:
-                    if physical_interface in interface['interface']:
+                    if physical_interface in interface['interface'] and "." not in interface['interface']:
                         all_interfaces_of_type.append(interface)
         else:
             for interface in all_interfaces:
@@ -530,8 +534,8 @@ class Interface:
         """
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", interface_details)
         ip_address_to_remove = list_of_ip_addresses[0]
-        loopback_to_delete = interface_details[:interface_details.find("\n")]
-        self.session.send_config_commands(commands=f"no {loopback_to_delete}")
+        interface_to_delete = interface_details[:interface_details.find("\n")]
+        self.session.send_config_commands(commands=f"no {interface_to_delete}")
         self.edit_db(ip_address=ip_address_to_remove, add_to_db=False)
         print(f"The {self.interface_type} has been deleted!")
         print("\nWould you like to write the old config to a file?")
@@ -605,6 +609,56 @@ class Physical(Interface):
                 print("\nCommands are being executed...")
                 self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
                 self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
+
+    def get_physical_to_delete(self) -> str:
+        """Used to get physical interface details fot delete
+
+        Returns:
+            str: physical interface to delete
+        """
+        list_of_interfaces = self.get_all_interfaces_of_type()
+
+        if len(list_of_interfaces) == 0:
+            print(f"\nNo {self.interface_type} found!")
+            input("Press enter to continue...")
+        else:
+            while True:
+                print(f"\nThese are the {self.interface_type} on the device:")
+                for index, formatted_interface in enumerate(list_of_interfaces, start=1):
+                    print(f"[{index}]. {formatted_interface['interface']}")
+
+                print("\nPlease select one that you wold like to delete")
+                interface_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
+                if interface_index == -1:
+                    break
+                interface_to_view = list_of_interfaces[interface_index-1]['interface']
+                return interface_to_view
+    
+    def delete_physical(self) -> None:
+        """_summary_
+
+        Returns:
+            _type_: _description_
+        """
+        interface_to_delete = self.get_physical_to_delete()
+        interface_details = self.session.send_show_command(command=f"show run interface {interface_to_delete}",use_textfsm=False)
+        interface_details = interface_details[interface_details.find("interface"):]
+        print(f"\n{interface_details}")
+
+        if "Serial" in interface_to_delete:
+            commands = [f"interface {interface_to_delete}", "no desc", "no ip address", "shutdown"]
+            old_interface_details = interface_details
+            interface_details = interface_details[interface_details.find("ip address"):]
+            list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", interface_details)
+            ip_address_to_remove = list_of_ip_addresses[0]
+            #interface_to_delete = interface_details[:interface_details.find("\n")]            
+            self.session.send_config_commands(commands=commands)
+            self.edit_db(ip_address=ip_address_to_remove, add_to_db=False)
+            print(f"The {self.interface_type} has been deleted!")
+            print("\nWould you like to write the old config to a file?")
+            self.write_output(old_interface_details)
+        else:
+            self.delete(interface_details=interface_to_delete)
 
 class Vlan(Interface):
     """"Used to handle vlan interface"""
