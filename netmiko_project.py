@@ -10,18 +10,18 @@ import netmiko
 import jinja2
 from tinydb import TinyDB, where
 
+
 class UserInput:
     """Used to gather and validate user input"""
+
     def __init__(self) -> None:
         """No attributes to assign"""
 
     @staticmethod
     def get_device_details(device_ip_address: str) -> dict:
         """Used to get device_details
-
         Args:
-            ip_address (str): ip address of device to conenct to
-
+            device_ip_address (str): ip address of device to connect to
         Returns:
             dict: contains everything needed for ssh session
         """
@@ -37,16 +37,17 @@ class UserInput:
 
     @staticmethod
     def validate_input_list(list_to_validate: list, message_to_be_displayed: str) -> str:
-        """Used to vlaidate user input when selecting from a list
-        
+        """Used to validate user input when selecting from a list
+
         Args:
             list_to_validate (list): list to validate user choice for
             message_to_be_displayed (str): message to be displayed to console
-        
+
         Returns:
             str: valid user choice
         """
-        #Used to validate user input
+        # Used to validate user input
+        user_index = 0
         while True:
             for index, device in enumerate(list_to_validate, start=1):
                 print(f"[{index}]. {device}")
@@ -69,45 +70,43 @@ class UserInput:
     @staticmethod
     def validate_input_int(start: int, end: int) -> int:
         """Used to validate user input when an int is used
-
         Args:
             start (int): lowest amount user can select
             end (int): highest amount user can select
-
         Returns:
             int: valid user choice
         """
         while True:
             try:
                 user_int_input = int(input("Please make a selection: "))
-                if user_int_input >= start and user_int_input <= end:
+                if start <= user_int_input <= end:
                     break
             except ValueError:
                 return -1
         return user_int_input
 
     @staticmethod
-    def get_devices_in_network() -> str:
+    def get_devices_in_network() -> list[str]:
         """Used to all devices connected in a network
-
         Returns:
             str: device ip address that will be connected to
         """
-        #Used to get all connected devices ip addreS
+        # Used to get all connected devices ip address
         stream = os.popen('arp -a')
         connected_devices = stream.read()
         connected_devices = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', connected_devices)
-        connected_devices.append("10.0.0.1") #R1
+        connected_devices.append("10.0.0.1")  # R1
         if len(connected_devices) == 0:
-            print("ERROR no devices visable in the network!")
+            print("ERROR no devices visible in the network!")
             sys.exit()
         return ["192.168.100.1", "192.168.200.1"]
 
+
 class Session:
     """Used to handle netmiko session"""
+
     def __init__(self, session_details: dict, user_input: UserInput) -> None:
         """starts instance of netmiko session to passed device
-
         Args:
             session_details (dict): Contains everything needed for ssh session
             user_input (UserInput): Used to validate user input
@@ -130,29 +129,25 @@ class Session:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
             except netmiko.NetmikoAuthenticationException:
-                print(f"Connection could not be establised to {self.session_details['host']}")
+                print(f"Connection could not be established to {self.session_details['host']}")
         except netmiko.NetmikoAuthenticationException:
-            print(f"Connection could not be establised to {self.session_details['host']}. Login incorrect")
+            print(f"Connection could not be established to {self.session_details['host']}. Login incorrect")
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
-        """Sends show comamnds to deivce and returns input
-
+        """Sends show commands to device and returns input
         Args:
             command (str): command to run on device
             use_textfsm (bool): decides if textfsm will be used to format output
-
         Returns:
             str: output of command once run on device
         """
         return self.net_connect.send_command(command_string=command,
-                            read_timeout=100, use_textfsm=use_textfsm)
+                                             read_timeout=100, use_textfsm=use_textfsm)
 
     def get_full_config(self, use_textfsm: bool) -> str:
         """Gets full running config
-
         Args:
             use_textfsm (bool): decides if textfsm will be used to format output
-
         Returns:
             str: full running config of device
         """
@@ -160,7 +155,6 @@ class Session:
 
     def get_hostname(self) -> str:
         """Gets the host name of the device
-
         Returns:
             str: name of device
         """
@@ -171,7 +165,6 @@ class Session:
 
     def send_config_commands(self, commands: list) -> None:
         """Sends config commands to device
-
         Args:
             commands (list): list containing all commands to execute
         """
@@ -179,52 +172,59 @@ class Session:
 
     def send_show_interface_commands(self, interface_choice: str) -> None:
         """Used to determine what view commands to send (send)
-
         Args:
-            interface_choice (str): physical, loopback, Vlan, port channel
+            interface_choice (str): physical, loopback, Vlan
         """
         if interface_choice == "Full":
-            full = FullConfig(jinja_file_path="", yaml_file_path="", interface_type=interface_choice, user_input=self.user_input, session=self)
+            full = FullConfig(jinja_file_path="", yaml_file_path="", interface_type=interface_choice,
+                              user_input=self.user_input, session=self)
             full.show_running_config()
         else:
-            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_choice, user_input=self.user_input, session=self)
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_choice,
+                                  user_input=self.user_input, session=self)
             interface.show(is_user_interactable=True, is_for_delete=False)
 
     def send_create_interface_commands(self, interface_to_create: str) -> None:
         """Used to determine what view commands to send (create)
-
         Args:
-            interface_to_create (str): physical, loopback, Vlan, port channel
+            interface_to_create (str): physical, loopback, Vlan
         """
         if interface_to_create == "Physical":
-            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
+            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
+                                          interface_type=interface_to_create, user_input=self.user_input, session=self)
             physical_interface.assign()
         else:
-            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_to_create, user_input=self.user_input, session=self)
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
+                                  interface_type=interface_to_create, user_input=self.user_input, session=self)
             interface.create()
 
     def send_delete_interface_commands(self, interface_type_to_delete) -> None:
         """Used to determine what view commands to send (delete)
-
         Args:
-            interface_type_to_delete (str): physical, loopback, Vlan, port channel_
+            interface_type_to_delete (str): physical, loopback, Vlan
         """
         if interface_type_to_delete != "Physical":
-            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
+            interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
+                                  interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
             interface.show(is_user_interactable=True, is_for_delete=True)
         else:
-            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE, interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
+            physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
+                                          interface_type=interface_type_to_delete, user_input=self.user_input,
+                                          session=self)
             physical_interface.delete_physical()
 
+
+# noinspection PyTypeChecker
 class Interface:
     """Used to handle interfaces"""
-    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput, session: Session) -> None:
-        """Used to set up interfaces
 
+    def __init__(self, jinja_file_path: str, yaml_file_path: str, interface_type: str, user_input: UserInput,
+                 session: Session) -> None:
+        """Used to set up interfaces
         Args:
             Args:
             jinja_file_path (str): file path to jinja folder
-            yaml_file_path (str): pathh to yaml input file
+            yaml_file_path (str): path to yaml input file
             interface_type (str): type of interface
             user_input (UserInput): ref to user input class
             session (Session): ref to session class
@@ -248,10 +248,8 @@ class Interface:
     @staticmethod
     def check_ip_format(ip_to_check: str) -> bool:
         """Used to check that ip address is in the correct format as is not already used in the network
-
         Args:
             ip_to_check (str): ip to be checked for usage and format
-
         Returns:
             bool: valid or not
         """
@@ -275,10 +273,8 @@ class Interface:
     @staticmethod
     def calculate_subnet_mask(ip_with_subnet: str) -> str:
         """Used to calculate subnet mask based on x.x.x.x/x address format
-
         Args:
             ip_with_subnet (str): ip in x.x.x.x/x format
-
         Returns:
             str: subnet mask
         """
@@ -288,10 +284,8 @@ class Interface:
     @staticmethod
     def get_next_ip_address(network_address: str) -> str:
         """Formats ip by removing subnet mask
-
         Args:
             network_address (str): ip address including mask
-
         Returns:
             str: ip address minus mask
         """
@@ -308,10 +302,8 @@ class Interface:
     @staticmethod
     def get_all_ip_addresses(string_of_ip_addresses: str) -> list:
         """_summary_
-
         Args:
             string_of_ip_addresses (str): string containing 1 or more ip addresses
-
         Returns:
             list: list of ip addresses
         """
@@ -321,7 +313,6 @@ class Interface:
     @staticmethod
     def ping(ip_address_to_ping: str, interface_created_name: str) -> None:
         """Used to ping an ip address
-
         Args:
             ip_address_to_ping (str): ip to ping check against
             interface_created_name (str): for output message
@@ -330,15 +321,14 @@ class Interface:
         if response == 0:
             print(f"Creation of {interface_created_name} successful")
         else:
-            print(f"Creation of {interface_created_name} unccessful")
+            print(f"Creation of {interface_created_name} unsuccessful")
 
     @staticmethod
     def edit_db(ip_address: str, add_to_db: bool) -> None:
         """Used to update TinyDB
-
         Args:
             ip_address (str): ip address to be added or removed
-            add_or_remove (bool): add or remove
+            add_to_db (bool): add or remove
         """
         if add_to_db:
             DB_FILE.insert({'ip_address': ip_address})
@@ -354,13 +344,12 @@ class Interface:
 
     def write_output(self, data_to_write: str) -> None:
         """Used to write output config to file
-
         Args:
             data_to_write (str): config to be written to file
         """
         print("[1]. Write to file")
         print("[2]. Do not write to file")
-        write_to_file = self.user_input.validate_input_int(start = 1, end = 2)
+        write_to_file = self.user_input.validate_input_int(start=1, end=2)
         if write_to_file == 1:
             with open(OUTPUT_FILE, "a", encoding="utf-8") as write_file:
                 write_file.write("=====================================\n")
@@ -374,11 +363,9 @@ class Interface:
             print("\nNot written to output file!")
 
     def generate_commands(self, command_data: dict) -> list:
-        """Uses jinja templates to generate cisco comamnds
-
+        """Uses jinja templates to generate cisco commands
         Args:
-            command_data (dict): dict containing all data for comamnds
-
+            command_data (dict): dict containing all data for commands
         Returns:
             list: list of commands
         """
@@ -389,10 +376,8 @@ class Interface:
 
     def check_name(self, name_to_check: str) -> bool:
         """checks if name is already in use
-
         Args:
             name_to_check (str): given name
-
         Returns:
             bool: is valid
         """
@@ -407,12 +392,11 @@ class Interface:
 
     def get_all_interfaces_of_type(self) -> list:
         """Get all interfaces of specified type
-
         Returns:
-            list: all interfaces of disered type
+            list: all interfaces of desired type
         """
         all_interfaces_of_type = []
-        all_interfaces = self.session.send_show_command(command='show interfaces',use_textfsm=True)
+        all_interfaces = self.session.send_show_command(command='show interfaces', use_textfsm=True)
         if self.interface_type == "Physical":
             list_of_physical_interfaces = ["Ethernet", "Serial", "BRI"]
             for physical_interface in list_of_physical_interfaces:
@@ -431,10 +415,8 @@ class Interface:
 
     def get_user_interface(self, is_user_interactable: bool) -> str:
         """Used to get single interface
-
         Args:
             is_user_interactable (bool): used to see if user can interact with the console
-
         Returns:
             str: single interface name
         """
@@ -452,13 +434,12 @@ class Interface:
                     interface_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
                     if interface_index == -1:
                         break
-                    interface_to_view = list_of_interfaces[interface_index-1]['interface']
+                    interface_to_view = list_of_interfaces[interface_index - 1]['interface']
                     return interface_to_view
                 return ""
 
     def show(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show interface info
-
         Args:
             is_user_interactable (bool): used to see if user can interact with the console
             is_for_delete (bool): used to get delete command
@@ -466,7 +447,8 @@ class Interface:
 
         interface_to_view = self.get_user_interface(is_user_interactable=is_user_interactable)
         if is_user_interactable:
-            interface_details = self.session.send_show_command(command=f"show run interface {interface_to_view}",use_textfsm=False)
+            interface_details = self.session.send_show_command(command=f"show run interface {interface_to_view}",
+                                                               use_textfsm=False)
             interface_details = interface_details[interface_details.find("interface"):]
 
             print(f"\n{interface_details}")
@@ -493,41 +475,34 @@ class Interface:
         elif interface_user_choice == -1:
             return
 
-        interface_commands  = self.generate_commands(command_data=interface_tuple[0])
+        interface_commands = self.generate_commands(command_data=interface_tuple[0])
         self.session.send_config_commands(commands=interface_commands)
         print("\nCommands are being executed...")
         self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
         self.show(is_user_interactable=False, is_for_delete=False)
-        self.edit_db(ip_address=interface_tuple[1], add_to_db=True)           
+        self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
 
     def create_using_console(self) -> tuple:
         """Used to created interface from user input
-
         Returns:
             tuple: [0]dict, [1]str
         """
         while True:
             user_ip = input("\nPlease enter in the ip address with subnet: ")
             if self.check_ip_format(ip_to_check=user_ip):
-                interface_data = {
-                    'name': input("Please enter in the name: "),
-                    'ip': '',
-                    'desc': input("Please enter in the description: "),
-                    'mask': '',
-                    'type': 'basic'
-                }
+                interface_data = {'name': input("Please enter in the name: "),
+                                  'ip': self.get_next_ip_address(network_address=user_ip),
+                                  'desc': input("Please enter in the description: "), 'mask': '', 'type': 'basic'}
 
-                interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
                 if interface_data['ip'] is not None:
                     interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                     if self.check_name(name_to_check=interface_data['name']):
                         break
                     print("\nError name already in use. Delete before creating!\n")
-        return (interface_data, user_ip)
+        return interface_data, user_ip
 
     def yaml_creation(self) -> tuple:
         """Uses yaml input file to create commands
-
         Returns:
             tuple: [0]dict, [1]str
         """
@@ -535,7 +510,7 @@ class Interface:
         interface_data['type'] = "basic"
         self.check_ip_format(interface_data['ip'])
         user_interface_ip = interface_data['ip']
-        interface_data['ip']= self.get_next_ip_address(network_address=user_interface_ip)
+        interface_data['ip'] = self.get_next_ip_address(network_address=user_interface_ip)
         if interface_data['ip'] is not None:
             interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_interface_ip)
             if self.check_name(name_to_check=interface_data['name']):
@@ -545,11 +520,10 @@ class Interface:
         else:
             print("Please adjust input file!")
             return None
-        return (interface_data, user_interface_ip)
+        return interface_data, user_interface_ip
 
     def delete(self, interface_details: str) -> None:
         """Used to delete interface
-
         Args:
             interface_details (str): full config to remove
         """
@@ -561,23 +535,26 @@ class Interface:
         self.edit_db(ip_address=ip_address_to_remove, add_to_db=False)
         print(f"The {self.interface_type} has been deleted!")
 
+
 class FullConfig(Interface):
     """Used to handle everything full config"""
+
     def show_running_config(self) -> None:
         """Deals with running config aspect"""
         full_config = self.session.get_full_config(use_textfsm=False)
         print(f"\n{full_config}")
         self.write_output(data_to_write=full_config)
 
+
 class Physical(Interface):
     """"Used to handle physical interfaces"""
+
     def check_in_use(self, interface_name: str) -> bool:
         """Used to check if a physical interface is already assigned
-
         Returns:
             bool: True(not in use) or False(in use)
         """
-        details = self.session.send_show_command(command=f"show run interface {interface_name}",use_textfsm=False)
+        details = self.session.send_show_command(command=f"show run interface {interface_name}", use_textfsm=False)
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", details)
         if len(list_of_ip_addresses) == 0:
             return True
@@ -586,26 +563,19 @@ class Physical(Interface):
 
     def assign_using_console(self, interface_name: str) -> tuple:
         """Overload of basic method used to created interface from user input
-
         Returns:
             tuple: [0]dict, [1]str
         """
         while True:
             user_ip = input("Please enter in the ip address with subnet: ")
             if self.check_ip_format(ip_to_check=user_ip):
-                interface_data = {
-                    'name': interface_name,
-                    'ip': '',
-                    'desc': input("Please enter in the description: "),
-                    'mask': '',
-                    'type': 'basic'
-                }
+                interface_data = dict(name=interface_name, ip=self.get_next_ip_address(network_address=user_ip),
+                                      desc=input("Please enter in the description: "), mask='', type='basic')
 
-                interface_data['ip'] = self.get_next_ip_address(network_address=user_ip)
                 if interface_data['ip'] is not None:
                     interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                     break
-        return (interface_data, user_ip)
+        return interface_data, user_ip
 
     def assign(self) -> None:
         """Overload of basic function used to assign physical interfaces"""
@@ -620,20 +590,22 @@ class Physical(Interface):
                 print(f"[{index}]. {formatted_interface['interface']}")
 
             interface_index = self.user_input.validate_input_int(1, len(list_of_interfaces))
-            interface_to_assign = list_of_interfaces[interface_index-1]['interface']
+            interface_to_assign = list_of_interfaces[interface_index - 1]['interface']
 
             if self.check_in_use(interface_name=interface_to_assign):
                 interface_tuple = self.assign_using_console(interface_name=interface_to_assign)
-                interface_commands  = self.generate_commands(command_data=interface_tuple[0])
+                interface_commands = self.generate_commands(command_data=interface_tuple[0])
                 self.session.send_config_commands(commands=interface_commands)
                 print("\nCommands are being executed...")
-                self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
+                self.ping(ip_address_to_ping=interface_tuple[0]['ip'],
+                          interface_created_name=interface_tuple[0]['name'])
                 self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
 
     def delete_physical(self) -> None:
-        """Used to delet physical interface"""
+        """Used to delete physical interface"""
         interface_to_delete = self.get_user_interface(is_user_interactable=True)
-        interface_details = self.session.send_show_command(command=f"show run interface {interface_to_delete}",use_textfsm=False)
+        interface_details = self.session.send_show_command(command=f"show run interface {interface_to_delete}",
+                                                           use_textfsm=False)
         interface_details = interface_details[interface_details.find("interface"):]
         print(f"\n{interface_details}")
 
@@ -653,18 +625,23 @@ class Physical(Interface):
         else:
             self.delete(interface_details=interface_to_delete)
 
+
 class Vlan(Interface):
     """"Used to handle vlan interfaces"""
-    def create_vlan(self) -> None:
-        """_summary_
 
+    @staticmethod
+    def create_vlan() -> None:
+        """_summary_
         Returns:
             _type_: _description_
         """
         print()
-    
+
+
+# noinspection PyTypeChecker
 class Main:
     """Main program body"""
+
     def __init__(self) -> None:
         """Used to assign class wide attributes"""
         self.user_input = UserInput
@@ -696,7 +673,6 @@ class Main:
 
     def device_scan(self) -> dict:
         """Gets user selected device details in the network
-
         Returns:
             dict: Contains everything needed for ssh session
         """
@@ -708,14 +684,12 @@ class Main:
 ///////////////////////////\n""")
         list_of_connected_devices = self.user_input.get_devices_in_network()
         device_to_connect_to = self.user_input.validate_input_list(
-                                                            list_to_validate=list_of_connected_devices,
-                                                            message_to_be_displayed=
-                                                            "Please select the device you want to conenct to: ")
+            list_to_validate=list_of_connected_devices,
+            message_to_be_displayed="Please select the device you want to connect to: ")
         return self.user_input.get_device_details(device_to_connect_to)
 
     def display_device_menu(self) -> int:
         """Used to display options to user that can be done on a device
-
         Returns:
             int: user selection of option
         """
@@ -734,10 +708,9 @@ class Main:
         return self.user_input.validate_input_int(start=1, end=4)
 
     def display_device_options(self, interface_type: str) -> None:
-        """Displays options that can be slected
-
+        """Displays options that can be selected
         Args:
-            interface_type (str): physical, loopback, Vlan, port channel
+            interface_type (str): physical, loopback, Vlan
         """
         if interface_type != "Full":
             print(f"What would you like to do with the {interface_type}(s)?")
