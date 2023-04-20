@@ -96,8 +96,8 @@ class UserInput:
         if len(connected_devices) == 0:
             print("ERROR no devices visible in the network!")
             sys.exit()
-        return connected_devices
-        #return ["192.168.100.1", "192.168.200.1"]
+        #return connected_devices
+        return ["192.168.100.1", "192.168.200.1"]
 
 class Session:
     """Used to handle netmiko session"""
@@ -909,7 +909,7 @@ class DHCP(Interface):
                 return False
         return True
 
-    def create_using_console_vlan(self) -> None:
+    def create_using_console_vlan(self) -> tuple:
         """Create DHCP using console"""
         mask = ""
         default_router = ""
@@ -956,22 +956,52 @@ class DHCP(Interface):
         if user_choice == 2:
             command_dict['mask'] = command_dict['mask'] + " secondary"
 
-        new_DHCP_commands = self.generate_commands(command_data=command_dict)
-        print("\nCommands are being executed...")
-        self.session.send_config_commands(commands=new_DHCP_commands)
-        self.edit_db(ip_address=ip_subnet, add_to_db=True)
-        self.view()
+        return command_dict, ip_subnet
 
     def yaml_creation(self) -> tuple:
         user_ip = ""
-
+        valid = False
         interface_data = self.yaml_file[self.interface_type]
         interface_data['type'] = "DHCP"
-        print()
+        if interface_data['creation_type'] == "new":
+            if self.check_pool_number(pool_number=interface_data['name']) is False:
+                print("Please adjust input file!")
+                input("Press enter to continue...")
+                return None
+        else:
+            dhcp = self.session.send_show_command(command="show ip dhcp pool", use_textfsm=False)
+            list_of_pools = re.findall(r'Pool [0-9]+', dhcp)
+            for pool in list_of_pools:
+                pool = pool[5:]
+                if pool == interface_data['name']:
+                    valid = True
+            if valid is False:
+                print("Pool does not exist.")
+                print("Please adjust input file!")
+                input("Press enter to continue...")
 
+        if self.check_ip_format(ip_to_check=interface_data['ip']):
+            user_ip = interface_data['ip']
+            interface_data['default_router'] = self.get_next_ip_address(network_address=interface_data['ip'])
+            if interface_data['default_router'] is not None:
+                interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=interface_data['ip'])
+                ip = interface_data['ip']
+                interface_data['ip'] = ip[:ip.find("/")]
+            else:
+                print("Please adjust input file!")
+                input("Press enter to continue...")
+        else:
+            print("Please adjust input file!")
+            input("Press enter to continue...")
+        
+        if interface_data['creation_type'] != "new":
+            interface_data['mask'] = interface_data['mask'] + " secondary"
+        
+        return interface_data, user_ip
 
     def create_DHCP(self) -> None:
         """Creates DHCP"""
+        dhcp_tuple = ()
         print("\nThese are the currently configured DHCP pools:\n")
         dhcp = self.session.send_show_command(command="show ip dhcp pool", use_textfsm=False)
         list_of_pools = re.findall(r'Pool [0-9]+', dhcp)
@@ -985,9 +1015,15 @@ class DHCP(Interface):
         console_or_file = self.user_input.validate_input_int(start=1, end=2)
 
         if console_or_file == 1:
-            self.create_using_console_vlan()
+            dhcp_tuple = self.create_using_console_vlan()
         else:
-            self.yaml_creation()
+            dhcp_tuple = self.yaml_creation()
+        
+        new_DHCP_commands = self.generate_commands(command_data=dhcp_tuple[0])
+        print("\nCommands are being executed...")
+        self.session.send_config_commands(commands=new_DHCP_commands)
+        self.edit_db(ip_address=dhcp_tuple[1], add_to_db=True)
+        self.view()
 
     def delete_DHCP(self) -> None:
         """Deletes DHCP Pools"""
@@ -1002,7 +1038,10 @@ class DHCP(Interface):
         pool_details = self.session.send_show_command(command=f"show ip dhcp {pool_to_remove}", use_textfsm=False)
         pool_ip_addresses = self.get_all_ip_addresses(string_of_ip_addresses=pool_details)
 
-        self.edit_db(ip_address=pool_ip_addresses[0], add_to_db=False)
+        number_of_sub_pools = int(len(pool_ip_addresses) / 3)
+        for sun in range(number_of_sub_pools):
+            self.edit_db(ip_address=pool_ip_addresses[0], add_to_db=False)
+            del pool_ip_addresses[0:3]
         self.session.send_config_commands(commands=f"no ip dhcp {pool_to_remove}")
         self.view()
 
