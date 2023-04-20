@@ -1,0 +1,7 @@
+{% if config.type == "basic" %}int {{ config.name }}
+ip address {% if config.ip == "dhcp" %}dhcp{% else %} {{ config.ip }} {{ config.mask }}{%endif%}
+description {{ config.desc }}{% elif config.type == "advanced" %}interface {{ config.name }}
+encapsulation dot1Q {{ config.vlan }}
+{% if config.ip == "dhcp" %}ip address dhcp{% else %}ip address {{ config.ip }} {{ config.mask }}{%endif%}{%endif%}{% if config.type == "DHCP" %}ip dhcp pool {{ config.name }}
+network {{ config.ip }} {{ config.mask }}
+default-router {{ config.default_router }}{%endif%}
