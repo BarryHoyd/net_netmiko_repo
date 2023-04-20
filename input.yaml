@@ -1,4 +1,19 @@
 Loopback:
-   name: "loopback 6"
+   name: "loopback 16"
    ip: "10.9.1.0/24"
    desc: "Harry test"
+
+Physical:
+   name: "Ethernet3/0"
+   ip: "dhcp"
+   desc: "YAML test"
+
+Vlan:
+   name: "GigabitEthernet1/0"
+   vlan: "300"
+   ip: "10.10.1.8/30"
+   
+DHCP:
+   creation_type: "add"
+   name: "2"
+   ip: "10.10.68.0/24"
