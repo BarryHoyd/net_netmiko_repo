@@ -12,7 +12,6 @@ from tinydb import TinyDB, where
 
 class UserInput:
     """Used to gather and validate user input"""
-
     def __init__(self) -> None:
         """No attributes to assign"""
 
@@ -111,7 +110,7 @@ class Session:
         self.net_connect = netmiko.BaseConnection
         self.user_input = user_input
 
-    def make_connection(self) -> None:
+    def make_connection(self) -> bool:
         """Used to make ssh connection to cisco ios/nxos/iso telnet"""
         try:
             self.net_connect = netmiko.ConnectHandler(**self.session_details)
@@ -120,14 +119,19 @@ class Session:
                 self.net_connect.disconnect()
                 self.session_details['device_type'] = 'cisco_nxos'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
+                return True
+            else:
+                return True
         except netmiko.NetmikoTimeoutException:
             try:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
+                return True
             except netmiko.NetmikoAuthenticationException:
                 print(f"Connection could not be established to {self.session_details['host']}")
         except netmiko.NetmikoAuthenticationException:
             print(f"Connection could not be established to {self.session_details['host']}. Login incorrect")
+        return False
 
     def send_show_command(self, command: str, use_textfsm: bool) -> str:
         """Sends show commands to device and returns input
@@ -488,13 +492,13 @@ class Interface:
         interface_tuple = ()
 
         self.show(is_user_interactable=False, is_for_delete=False)
-        print("Please select one of the following:\n")
+        print("\nPlease select one of the following:\n")
         print("[1]. Create using command input")
         print("[2]. Create using input file")
         interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
 
         if interface_user_choice == 1:
-            interface_tuple = self.create_using_console_vlan()
+            interface_tuple = self.create_using_console()
         elif interface_user_choice == 2:
             interface_tuple = self.yaml_creation()
         elif interface_user_choice == -1:
@@ -508,7 +512,7 @@ class Interface:
             self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
             self.show(is_user_interactable=False, is_for_delete=False)
                 
-    def create_using_console_vlan(self) -> tuple:
+    def create_using_console(self) -> tuple:
         """Used to created interface from user input
         Returns:
             tuple: [0]dict, [1]str
@@ -555,7 +559,7 @@ class Interface:
             if interface_data['ip'] is not None:
                 interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_interface_ip)
                 if self.check_name(name_to_check=interface_data['name']) == False:
-                    print("\nError name already in use. Delete before creating!\n")
+                    print("\nError name already in use. Delete before creating!")
                     print("Please adjust input file!")
                     input("Press enter to continue...")
                     return None
@@ -745,7 +749,7 @@ class Vlan(Interface):
                 return False
         return True
 
-    def create_using_console_vlan(self, formatted_interfaces: list, list_of_vlans: list) -> tuple:
+    def create_using_console(self, formatted_interfaces: list, list_of_vlans: list) -> tuple:
         """Creates Vlan from user input
 
         Args:
@@ -755,6 +759,7 @@ class Vlan(Interface):
         Returns:
             tuple: [0]dict, [1]str
         """
+        print()
         for index, formatted_interface in enumerate(formatted_interfaces, start=1):
                 print(f"[{index}]. {formatted_interface['interface']}")
         
@@ -765,7 +770,7 @@ class Vlan(Interface):
             if self.check_vlan_in_use(vlan_number=vlan_number, interface_name=interface_to_assign, list_of_vlans=list_of_vlans):
                 break
             else:
-                print("Vlan number in use! please select another.")
+                print("Vlan number in use! Please select another.")
         interface_to_assign = f"{interface_to_assign}.{vlan_number}"
         while True:
             mask = ""
@@ -774,9 +779,11 @@ class Vlan(Interface):
             if user_ip != "dhcp":
                 if self.check_ip_format(ip_to_check=user_ip):
                     ip = self.get_next_ip_address(network_address=user_ip)
-                    mask = self.calculate_subnet_mask(ip_with_subnet=user_ip)
-                    break
-            break
+                    if ip is not None:
+                        mask = self.calculate_subnet_mask(ip_with_subnet=user_ip)
+                        break
+            else:
+                break
             
         command_dict = {
             'name': interface_to_assign,
@@ -855,7 +862,7 @@ class Vlan(Interface):
         interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
         
         if interface_user_choice == 1:
-            vlan_tuple = self.create_using_console_vlan(formatted_interfaces=formatted_interfaces, list_of_vlans=list_of_vlans)
+            vlan_tuple = self.create_using_console(formatted_interfaces=formatted_interfaces, list_of_vlans=list_of_vlans)
         else:
             vlan_tuple = self.yaml_creation_vlan(list_of_vlans=list_of_vlans)
 
@@ -909,7 +916,7 @@ class DHCP(Interface):
                 return False
         return True
 
-    def create_using_console_vlan(self) -> tuple:
+    def create_using_console(self) -> tuple:
         """Create DHCP using console"""
         mask = ""
         default_router = ""
@@ -1015,7 +1022,7 @@ class DHCP(Interface):
         console_or_file = self.user_input.validate_input_int(start=1, end=2)
 
         if console_or_file == 1:
-            dhcp_tuple = self.create_using_console_vlan()
+            dhcp_tuple = self.create_using_console()
         else:
             dhcp_tuple = self.yaml_creation()
         
@@ -1039,6 +1046,7 @@ class DHCP(Interface):
         pool_ip_addresses = self.get_all_ip_addresses(string_of_ip_addresses=pool_details)
 
         number_of_sub_pools = int(len(pool_ip_addresses) / 3)
+        print()
         for sun in range(number_of_sub_pools):
             self.edit_db(ip_address=pool_ip_addresses[0], add_to_db=False)
             del pool_ip_addresses[0:3]
@@ -1140,9 +1148,11 @@ class Main:
         self.display_main_menu()
         main_menu_choice = self.user_input.validate_input_int(1, 2)
         if main_menu_choice == 1:
-            ssh_details = self.device_scan()
-            self.ssh_session = Session(session_details=ssh_details, user_input=self.user_input)
-            self.ssh_session.make_connection()
+            while True:
+                ssh_details = self.device_scan()
+                self.ssh_session = Session(session_details=ssh_details, user_input=self.user_input)
+                if self.ssh_session.make_connection():
+                    break
             while True:
                 device_choice = self.display_device_menu()
                 if device_choice == 1:
