@@ -1,3 +1,7 @@
+# pylint: disable=line-too-long
+# pylint: disable=import-error
+# pylint: disable=too-many-arguments
+# pylint: disable=too-many-lines
 """Program using netmiko for the automation of cisco devices"""
 import os
 import re
@@ -85,7 +89,7 @@ class UserInput:
     def get_devices_in_network() -> list[str]:
         """Used to all devices connected in a network
         Returns:
-            str: device ip address that will be connected to
+            list[str]: device ip address that will be connected to
         """
         # Used to get all connected devices ip address
         stream = os.popen('arp -a')
@@ -120,8 +124,7 @@ class Session:
                 self.session_details['device_type'] = 'cisco_nxos'
                 self.net_connect = netmiko.ConnectHandler(**self.session_details)
                 return True
-            else:
-                return True
+            return True
         except netmiko.NetmikoTimeoutException:
             try:
                 self.session_details['device_type'] = 'cisco_iso_telnet'
@@ -204,7 +207,7 @@ class Session:
         elif interface_to_create == "DHCP":
             dhcp_interface = DHCP(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
                                           interface_type=interface_to_create, user_input=self.user_input, session=self)
-            dhcp_interface.create_DHCP()
+            dhcp_interface.create_dhcp()
         else:
             interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
                                   interface_type=interface_to_create, user_input=self.user_input, session=self)
@@ -218,13 +221,12 @@ class Session:
         if interface_type_to_delete == "DHCP":
             dhcp_interface = DHCP(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
                                           interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
-            dhcp_interface.delete_DHCP()
+            dhcp_interface.delete_dhcp()
         elif interface_type_to_delete == "Physical":
             physical_interface = Physical(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
                                           interface_type=interface_type_to_delete, user_input=self.user_input,
                                           session=self)
             physical_interface.delete_physical()
-            
         else:
             interface = Interface(jinja_file_path=JINJA_FILE, yaml_file_path=YAML_FILE,
                                   interface_type=interface_type_to_delete, user_input=self.user_input, session=self)
@@ -279,7 +281,7 @@ class Interface:
                         print(f"\nERROR! {ip_to_check} is already reserved in the network!")
                         return False
                     for host in net.hosts():
-                        if ipv4_address == host or  ipv4_address == net.broadcast_address:
+                        if ipv4_address in (host, net.broadcast_address):
                             print(f"\nERROR! {ip_to_check} is already reserved in the network!")
                             return False
                 return True
@@ -319,12 +321,12 @@ class Interface:
             return None
 
     @staticmethod
-    def get_all_ip_addresses(string_of_ip_addresses: str) -> list:
+    def get_all_ip_addresses(string_of_ip_addresses: str) -> list[str]:
         """_summary_
         Args:
             string_of_ip_addresses (str): string containing 1 or more ip addresses
         Returns:
-            list: list of ip addresses
+            list[str]: list of ip addresses
         """
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", string_of_ip_addresses)
         return list_of_ip_addresses
@@ -381,7 +383,7 @@ class Interface:
         elif write_to_file == 2:
             print("\nNot written to output file!")
 
-    def generate_commands(self, command_data: dict) -> list:
+    def generate_commands(self, command_data: dict) -> list[str]:
         """Uses jinja templates to generate cisco commands
         Args:
             command_data (dict): dict containing all data for commands
@@ -411,7 +413,7 @@ class Interface:
                 return False
         return True
 
-    def get_all_interfaces_of_type(self) -> list:
+    def get_all_interfaces_of_type(self) -> list[str]:
         """Get all interfaces of specified type
         Returns:
             list: all interfaces of desired type
@@ -457,6 +459,7 @@ class Interface:
                     interface_to_view = list_of_interfaces[interface_index - 1]['interface']
                     return interface_to_view
                 return ""
+        return ""
 
     def show(self, is_user_interactable: bool, is_for_delete: bool) -> None:
         """Used to show interface info
@@ -511,13 +514,13 @@ class Interface:
             self.ping(ip_address_to_ping=interface_tuple[0]['ip'], interface_created_name=interface_tuple[0]['name'])
             self.edit_db(ip_address=interface_tuple[1], add_to_db=True)
             self.show(is_user_interactable=False, is_for_delete=False)
-                
+
     def create_using_console(self) -> tuple:
         """Used to created interface from user input
         Returns:
             tuple: [0]dict, [1]str
         """
-        ip = ""
+        ip_address = ""
         name = ""
         mask = ""
         description = ""
@@ -525,20 +528,20 @@ class Interface:
         while True:
             user_ip = input("\nPlease enter in the ip address with subnet: ")
             if self.check_ip_format(ip_to_check=user_ip):
-                ip = self.get_next_ip_address(network_address=user_ip)
-                if ip is not None:
+                ip_address = self.get_next_ip_address(network_address=user_ip)
+                if ip_address is not None:
                     mask = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                     break
         while True:
             name = input("Please enter in the name: ")
             if self.check_name(name_to_check=name):
                 break
-            else:
-                print("\nError name already in use. Delete before creating!\n")
+            print("\nError name already in use. Delete before creating!\n")
+
         description = input("Please enter in the description: ")
 
         interface_data = {'name': name,
-                            'ip': ip,
+                            'ip': ip_address,
                             'desc': description, 'mask': mask, 'type': 'basic'}
 
         return interface_data, user_ip
@@ -558,7 +561,7 @@ class Interface:
             interface_data['ip'] = self.get_next_ip_address(network_address=user_interface_ip)
             if interface_data['ip'] is not None:
                 interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=user_interface_ip)
-                if self.check_name(name_to_check=interface_data['name']) == False:
+                if self.check_name(name_to_check=interface_data['name']) is False:
                     print("\nError name already in use. Delete before creating!")
                     print("Please adjust input file!")
                     input("Press enter to continue...")
@@ -578,7 +581,7 @@ class Interface:
         Args:
             interface_details (str): full config to remove
         """
-        
+
         if "dhcp" not in interface_details:
             list_of_ip_addresses = self.get_all_ip_addresses(string_of_ip_addresses=interface_details)
             ip_address_to_remove = list_of_ip_addresses[0]
@@ -641,7 +644,7 @@ class Physical(Interface):
         Returns:
             tuple: [0]dict, [1]str
         """
-        ip = ""
+        ip_address = ""
         mask = ""
         description = ""
 
@@ -649,8 +652,8 @@ class Physical(Interface):
             user_ip = input("\nPlease enter in the ip address with subnet or type dhcp: ")
             if user_ip != "dhcp":
                 if self.check_ip_format(ip_to_check=user_ip):
-                    ip = self.get_next_ip_address(network_address=user_ip)
-                    if ip is not None:
+                    ip_address = self.get_next_ip_address(network_address=user_ip)
+                    if ip_address is not None:
                         mask = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                         break
             else:
@@ -660,7 +663,7 @@ class Physical(Interface):
 
         interface_data = {
             'name': interface_name,
-            'ip': ip,
+            'ip': ip_address,
             'desc': description, 'mask': mask, 'type': 'basic'
         }
 
@@ -734,22 +737,22 @@ class Physical(Interface):
 
 class Vlan(Interface):
     """"Used to handle vlan interfaces"""
-    def check_vlan_in_use(self, vlan_number: str, interface_name: str, list_of_vlans: list) -> bool:
-        """_summary_
+    def check_vlan_in_use(self, vlan_number: str, interface_name: str, list_of_vlans: list[str]) -> bool:
+        """Checks if Vlan number is already in use on a interface
 
         Args:
-            vlan_number (str): _description_
-            interface_name (str): _description_
+            vlan_number (str): number to cehck
+            interface_name (str): interface to check on
 
         Returns:
-            bool: _description_
+            bool: in use False, not in use True
         """
         for vlan in list_of_vlans:
             if vlan_number == vlan['vlan_id'] and interface_name in vlan['interface']:
                 return False
         return True
 
-    def create_using_console(self, formatted_interfaces: list, list_of_vlans: list) -> tuple:
+    def create_vlan_using_console(self, formatted_interfaces: list[str], list_of_vlans: list[str]) -> tuple:
         """Creates Vlan from user input
 
         Args:
@@ -761,43 +764,43 @@ class Vlan(Interface):
         """
         print()
         for index, formatted_interface in enumerate(formatted_interfaces, start=1):
-                print(f"[{index}]. {formatted_interface['interface']}")
-        
+            print(f"[{index}]. {formatted_interface['interface']}")
+
         interface_index = self.user_input.validate_input_int(1, len(formatted_interfaces))
         interface_to_assign = formatted_interfaces[interface_index - 1]['interface']
         while True:
             vlan_number = input("\nPlease enter in the vlan number you want: ")
             if self.check_vlan_in_use(vlan_number=vlan_number, interface_name=interface_to_assign, list_of_vlans=list_of_vlans):
                 break
-            else:
-                print("Vlan number in use! Please select another.")
+            print("Vlan number in use! Please select another.")
         interface_to_assign = f"{interface_to_assign}.{vlan_number}"
         while True:
             mask = ""
             user_ip = input("\nPlease enter in the ip address with subnet or type dhcp: ")
-            ip = user_ip
+            ip_address = user_ip
             if user_ip != "dhcp":
                 if self.check_ip_format(ip_to_check=user_ip):
-                    ip = self.get_next_ip_address(network_address=user_ip)
-                    if ip is not None:
+                    ip_address = self.get_next_ip_address(network_address=user_ip)
+                    if ip_address is not None:
                         mask = self.calculate_subnet_mask(ip_with_subnet=user_ip)
                         break
             else:
                 break
-            
+
         command_dict = {
             'name': interface_to_assign,
             'vlan': vlan_number,
-            'ip': ip,
+            'ip': ip_address,
             'mask': mask,
             'type': "advanced"
         }
         return command_dict, user_ip
 
-    def yaml_creation_vlan(self, list_of_vlans: list) -> tuple:
+    def yaml_creation_vlan(self, list_of_vlans: list[str]) -> tuple:
         """Create vlan using YAML file
         Args:
-            list_of_vlans (list): list of current Vlans        Returns:
+            list_of_vlans (list): list of current Vlans       
+        Returns:
             tuple: [0] dict, [1] str
         """
         self.interface_type = "Vlan"
@@ -846,8 +849,8 @@ class Vlan(Interface):
                 print(f"[{index}]. {vlan['interface']}")
 
         for interface in list_of_physical_interfaces:
-                if "Ethernet" in interface['interface']:
-                    formatted_interfaces.append(interface)
+            if "Ethernet" in interface['interface']:
+                formatted_interfaces.append(interface)
 
         if len(formatted_interfaces) == 0:
             print("\nNo physical interfaces found that can have vlans assigned to them!")
@@ -855,14 +858,14 @@ class Vlan(Interface):
             print("\nThese are the physical interfaces on the device that can have vlans assigned to them:\n")
             for index, formatted_interface in enumerate(formatted_interfaces, start=1):
                 print(f"[{index}]. {formatted_interface['interface']}")
-        
+
         print("\nPlease select one of the following:\n")
         print("[1]. Create using command input")
         print("[2]. Create using input file")
         interface_user_choice = self.user_input.validate_input_int(start=1, end=2)
-        
+
         if interface_user_choice == 1:
-            vlan_tuple = self.create_using_console(formatted_interfaces=formatted_interfaces, list_of_vlans=list_of_vlans)
+            vlan_tuple = self.create_vlan_using_console(formatted_interfaces=formatted_interfaces, list_of_vlans=list_of_vlans)
         else:
             vlan_tuple = self.yaml_creation_vlan(list_of_vlans=list_of_vlans)
 
@@ -897,14 +900,15 @@ class DHCP(Interface):
             number_of_dhcp_subnets = int(len(pool['ip_info']) / 3)
             print(f"\n{pool['name']}\n")
             print("Current index        IP address range")
-            for x in range(number_of_dhcp_subnets):
+            for _ in range(number_of_dhcp_subnets):
                 print(f"{pool['ip_info'][0]}      {pool['ip_info'][1]} - {pool['ip_info'][2]}")
                 del pool['ip_info'][0:3]
         input("\nPlease press enter to continue...")
 
     def check_pool_number(self, pool_number: str) -> bool:
         """Checks if pool is already inuse
-
+        Args:
+            pool_number(str): Pool number to check in use
         Returns:
             bool: true or false
         """
@@ -916,11 +920,14 @@ class DHCP(Interface):
                 return False
         return True
 
-    def create_using_console(self) -> tuple:
-        """Create DHCP using console"""
+    def create_dhcp_using_console(self) -> tuple:
+        """Create DHCP using console
+        Returns:
+            tuple: [0]dict, [1]str
+        """
         mask = ""
         default_router = ""
-        ip = ""
+        ip_address = ""
         ip_subnet = ""
 
         print("\n[1]. Create new DHCP pool")
@@ -950,12 +957,12 @@ class DHCP(Interface):
                 default_router = self.get_next_ip_address(network_address=ip_subnet)
                 if default_router is not None:
                     mask = self.calculate_subnet_mask(ip_with_subnet=ip_subnet)
-                    ip = ip_subnet[:ip_subnet.find("/")]
+                    ip_address = ip_subnet[:ip_subnet.find("/")]
                     break
 
         command_dict = {
             'name': pool_number,
-            'ip': ip,
+            'ip': ip_address,
             'mask': mask,
             'default_router': default_router,
             'type': 'DHCP'
@@ -966,6 +973,10 @@ class DHCP(Interface):
         return command_dict, ip_subnet
 
     def yaml_creation(self) -> tuple:
+        """Used to create DHCP through YAML file
+        Returns:
+            tuple: [0]dict, [1]str
+        """
         user_ip = ""
         valid = False
         interface_data = self.yaml_file[self.interface_type]
@@ -992,21 +1003,21 @@ class DHCP(Interface):
             interface_data['default_router'] = self.get_next_ip_address(network_address=interface_data['ip'])
             if interface_data['default_router'] is not None:
                 interface_data['mask'] = self.calculate_subnet_mask(ip_with_subnet=interface_data['ip'])
-                ip = interface_data['ip']
-                interface_data['ip'] = ip[:ip.find("/")]
+                ip_address = interface_data['ip']
+                interface_data['ip'] = ip_address[:ip_address.find("/")]
             else:
                 print("Please adjust input file!")
                 input("Press enter to continue...")
         else:
             print("Please adjust input file!")
             input("Press enter to continue...")
-        
+
         if interface_data['creation_type'] != "new":
             interface_data['mask'] = interface_data['mask'] + " secondary"
-        
+
         return interface_data, user_ip
 
-    def create_DHCP(self) -> None:
+    def create_dhcp(self) -> None:
         """Creates DHCP"""
         dhcp_tuple = ()
         print("\nThese are the currently configured DHCP pools:\n")
@@ -1015,24 +1026,24 @@ class DHCP(Interface):
 
         for index, pool in enumerate(list_of_pools, start=1):
             print(f"[{index}]. {pool}")
-        
+
         print("\nWhat would you like to do:\n")
         print("[1]. Create using console")
         print("[2]. Create using input file")
         console_or_file = self.user_input.validate_input_int(start=1, end=2)
 
         if console_or_file == 1:
-            dhcp_tuple = self.create_using_console()
+            dhcp_tuple = self.create_dhcp_using_console()
         else:
             dhcp_tuple = self.yaml_creation()
-        
-        new_DHCP_commands = self.generate_commands(command_data=dhcp_tuple[0])
+
+        new_dhcp_commands = self.generate_commands(command_data=dhcp_tuple[0])
         print("\nCommands are being executed...")
-        self.session.send_config_commands(commands=new_DHCP_commands)
+        self.session.send_config_commands(commands=new_dhcp_commands)
         self.edit_db(ip_address=dhcp_tuple[1], add_to_db=True)
         self.view()
 
-    def delete_DHCP(self) -> None:
+    def delete_dhcp(self) -> None:
         """Deletes DHCP Pools"""
         print("Please select which pool you would to delete:\n")
         dhcp = self.session.send_show_command(command="show ip dhcp pool", use_textfsm=False)
@@ -1047,7 +1058,7 @@ class DHCP(Interface):
 
         number_of_sub_pools = int(len(pool_ip_addresses) / 3)
         print()
-        for sun in range(number_of_sub_pools):
+        for _ in range(number_of_sub_pools):
             self.edit_db(ip_address=pool_ip_addresses[0], add_to_db=False)
             del pool_ip_addresses[0:3]
         self.session.send_config_commands(commands=f"no ip dhcp {pool_to_remove}")
