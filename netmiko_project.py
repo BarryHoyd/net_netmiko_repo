@@ -86,10 +86,10 @@ class UserInput:
         return user_int_input
 
     @staticmethod
-    def get_devices_in_network() -> list[str]:
+    def get_devices_in_network() -> list:
         """Used to all devices connected in a network
         Returns:
-            list[str]: device ip address that will be connected to
+            list: device ip address that will be connected to
         """
         # Used to get all connected devices ip address
         stream = os.popen('arp -a')
@@ -321,12 +321,12 @@ class Interface:
             return None
 
     @staticmethod
-    def get_all_ip_addresses(string_of_ip_addresses: str) -> list[str]:
+    def get_all_ip_addresses(string_of_ip_addresses: str) -> list:
         """_summary_
         Args:
             string_of_ip_addresses (str): string containing 1 or more ip addresses
         Returns:
-            list[str]: list of ip addresses
+            list: list of ip addresses
         """
         list_of_ip_addresses = re.findall(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}", string_of_ip_addresses)
         return list_of_ip_addresses
@@ -383,7 +383,7 @@ class Interface:
         elif write_to_file == 2:
             print("\nNot written to output file!")
 
-    def generate_commands(self, command_data: dict) -> list[str]:
+    def generate_commands(self, command_data: dict) -> list:
         """Uses jinja templates to generate cisco commands
         Args:
             command_data (dict): dict containing all data for commands
@@ -413,7 +413,7 @@ class Interface:
                 return False
         return True
 
-    def get_all_interfaces_of_type(self) -> list[str]:
+    def get_all_interfaces_of_type(self) -> list:
         """Get all interfaces of specified type
         Returns:
             list: all interfaces of desired type
@@ -737,7 +737,7 @@ class Physical(Interface):
 
 class Vlan(Interface):
     """"Used to handle vlan interfaces"""
-    def check_vlan_in_use(self, vlan_number: str, interface_name: str, list_of_vlans: list[str]) -> bool:
+    def check_vlan_in_use(self, vlan_number: str, interface_name: str, list_of_vlans: list) -> bool:
         """Checks if Vlan number is already in use on a interface
 
         Args:
@@ -752,7 +752,7 @@ class Vlan(Interface):
                 return False
         return True
 
-    def create_vlan_using_console(self, formatted_interfaces: list[str], list_of_vlans: list[str]) -> tuple:
+    def create_vlan_using_console(self, formatted_interfaces: list, list_of_vlans: list) -> tuple:
         """Creates Vlan from user input
 
         Args:
@@ -796,7 +796,7 @@ class Vlan(Interface):
         }
         return command_dict, user_ip
 
-    def yaml_creation_vlan(self, list_of_vlans: list[str]) -> tuple:
+    def yaml_creation_vlan(self, list_of_vlans: list) -> tuple:
         """Create vlan using YAML file
         Args:
             list_of_vlans (list): list of current Vlans       
